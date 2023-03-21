@@ -1,4 +1,4 @@
-// Copyright 2023 Krzysztof Wiśniewski <argmaster.world@gmail.com>
+// Copyright 2023 Krzysztof Wisniewski <argmaster.world@gmail.com>
 //
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy of this
