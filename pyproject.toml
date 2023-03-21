@@ -36,7 +36,7 @@ name = "cssfinder_backend_rust"
 version = "0.1.0"
 requires-python = ">=3.8"
 authors = [
-    { name = "Krzysztof Wisniewski", email = "<argmaster.world@gmail.com>" },
+    { name = "Krzysztof Wisniewski", email = "argmaster.world@gmail.com" },
 ]
 description = "Implementation of CSSFinder backend using Rust."
 classifiers = [
