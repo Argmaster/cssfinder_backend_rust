@@ -1,0 +1,47 @@
+[tool.poetry]
+name = "cssfinder-backend-rust-dev"
+version = "0.1.0"
+description = "Development environment for Rust based implementation of CSSFinder backend. Use Maturin to build."
+authors = ["Krzysztof Wiśniewski <argmaster.world@gmail.com>"]
+repository = "https://github.com/argmaster/cssfinder_backend_rust"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.8"
+
+[tool.poetry.group.dev.dependencies]
+maturin = "^0.14.15"
+click = "^8.1.3"
+tomlkit = "^0.11.6"
+poethepoet = "^0.18.1"
+pre-commit = "^3.2.0"
+ruff = "^0.0.257"
+black = "^23.1.0"
+
+[tool.poe.tasks]
+release = { script = "scripts.release:main" }
+install-hooks = [
+    { cmd = "poetry install --sync --no-ansi" },
+    { cmd = "poetry run pre-commit install --install-hooks --overwrite" },
+]
+run-hooks = [
+    { cmd = "poetry install --sync --no-ansi" },
+    { cmd = "pre-commit run --all-files -v" },
+]
+build = { cmd = "maturin build" }
+
+[project]
+name = "cssfinder_backend_rust"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+]
+
+[build-system]
+requires = ["maturin>=0.14,<0.15"]
+build-backend = "maturin"
+
+[tool.maturin]
+features = ["pyo3/extension-module"]

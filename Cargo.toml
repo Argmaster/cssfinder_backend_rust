@@ -1,0 +1,16 @@
+[package]
+name = "cssfinder-backend-rust"
+version = "0.1.0"
+edition = "2021"
+authors = ["Krzysztof Wiśniewski <argmaster.world@gmail.com>"]
+description = "Implementation of CSSFinder backend using Rust."
+repository = "https://github.com/argmaster/cssfinder_backend_rust"
+readme = "README.md"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "cssfinder_backend_rust"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.18.1", features = ["extension-module"] }
