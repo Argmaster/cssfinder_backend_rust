@@ -29,7 +29,7 @@ run-hooks = [
     { cmd = "pre-commit run --all-files -v" },
 ]
 build = { cmd = "maturin build --release --out dist" }
-version = { script = "scripts.version:version" }
+version = { script = "scripts.version:main" }
 
 [project]
 name = "cssfinder_backend_rust"

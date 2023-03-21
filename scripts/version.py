@@ -1,86 +1,88 @@
+"""Script providing version info and allowing for version manipulation."""
+import re
+from pathlib import Path
+
 import click
 import tomlkit
-import subprocess
-import re
-import logging
-from pathlib import Path
-from typing import Tuple
 
-PYPROJECT_TOML = "pyproject.toml"
-CARGO_TOML = "Cargo.toml"
-README_MD = "README.md"
-
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s: %(message)s",
-    handlers=[logging.StreamHandler()]
-)
-logger = logging.getLogger(__name__)
-
-
-def read_version(file_path: str) -> str:
-    with Path(file_path).open("r") as f:
-        toml_content = tomlkit.parse(f.read())
-        return toml_content["tool"]["poetry"]["version"]
-
-
-def write_version(file_path: str, version: str) -> None:
-    with Path(file_path).open("r") as f:
-        toml_content = tomlkit.parse(f.read())
-    with Path(file_path).open("w") as f:
-        for item in toml_content.as_string().splitlines():
-            if "version" in item:
-                f.write(f'version = "{version}"\n')
-            else:
-                f.write(f"{item}\n")
-
-
-def set_version(version: str) -> None:
-    # Validate version string
-    if not re.match(r"^\d+\.\d+\.\d+$", version):
-        raise ValueError("Invalid version string. Must be in SemVer format (e.g. '1.2.3').")
-
-    # Check version in one of the config files
-    py_version = read_version(PYPROJECT_TOML)
-    if py_version != version:
-        raise ValueError(f"Version string in {PYPROJECT_TOML} does not match provided version.")
-
-    # Update version in config files
-    write_version(PYPROJECT_TOML, version)
-    write_version(CARGO_TOML, version)
-
-    # Update version in README.md
-    readme_path = Path(README_MD)
-    readme_content = readme_path.read_text()
-    readme_content = readme_content.replace(py_version, version)
-    readme_path.write_text(readme_content)
-
-    logger.info(f"Version set to: {version}")
+PYPROJECT_TOML = Path("pyproject.toml")
+CARGO_TOML = Path("Cargo.toml")
+README_MD = Path("README.md")
 
 
 @click.group()
-def version() -> None:
+def main() -> None:
     pass
 
 
-@click.command()
+@main.command()
 def get() -> None:
-    py_version = read_version(PYPROJECT_TOML)
-    cargo_version = read_version(CARGO_TOML)
-    if py_version != cargo_version:
-        raise ValueError("Versions in config files do not match.")
-    click.echo(f"Current version: {py_version}")
+    version = read_version()
+    click.echo(version)
 
 
-@click.command()
+def read_version() -> str:
+    pyproject = tomlkit.loads(PYPROJECT_TOML.read_text())
+    cargo = tomlkit.loads(CARGO_TOML.read_text())
+
+    poetry_package_version = pyproject["tool"]["poetry"]["version"]
+    project_package_version = pyproject["project"]["version"]
+
+    if poetry_package_version != project_package_version:
+        msg = (
+            f"Version mismatch within pyproject versions {poetry_package_version} != "
+            f"{project_package_version}"
+        )
+        raise ValueError(msg)
+
+    cargo_package_version = cargo["package"]["version"]
+
+    if cargo_package_version != project_package_version:
+        msg = (
+            f"Version mismatch with cargo package version {cargo_package_version} != "
+            f"{project_package_version}"
+        )
+        raise ValueError(msg)
+
+    return cargo_package_version
+
+
+@main.command()
 @click.argument("version")
 def set(version: str) -> None:
     set_version(version)
 
 
-version.add_command(get)
-version.add_command(set)
+@main.command()
+@click.argument("offset", type=int)
+def set_dev(offset: int) -> None:
+    v = read_version()
+    find = re.match(
+        r"(?P<major>[0-9]+)\.(?P<minor>[0-9]+)\.(?P<patch>[0-9]+)", v
+    )
+    if find is None:
+        raise ValueError(f"Not matched {v!r}")
+    major = find.groupdict()["major"]
+    minor = find.groupdict()["minor"]
+    patch = find.groupdict()["patch"]
+
+    new_version = "{major}.{minor}.{patch}-dev.{offset}".format(
+        major=major, minor=minor, patch=int(patch) + 1, offset=offset
+    )
+    set_version(new_version)
+
+
+def set_version(version: str) -> None:
+    pyproject = tomlkit.loads(PYPROJECT_TOML.read_text())
+    cargo = tomlkit.loads(CARGO_TOML.read_text())
+
+    pyproject["tool"]["poetry"]["version"] = version
+    pyproject["project"]["version"] = version
+    cargo["package"]["version"] = version
+
+    PYPROJECT_TOML.write_text(tomlkit.dumps(pyproject))
+    CARGO_TOML.write_text(tomlkit.dumps(cargo))
+
 
 if __name__ == "__main__":
-    version()
+    main()
