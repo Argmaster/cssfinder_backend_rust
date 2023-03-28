@@ -20,7 +20,7 @@
 
 use pyo3::prelude::*;
 
-mod pure;
+mod naive;
 
 /// A Python module implemented in Rust.
 #[pymodule]
@@ -36,6 +36,9 @@ fn register_complex128(py: Python, parent: &PyModule) -> PyResult<()> {
 
     parent.add_function(wrap_pyfunction!(complex128::product, parent)?)?;
     parent.add_function(wrap_pyfunction!(complex128::normalize, parent)?)?;
+    parent.add_function(wrap_pyfunction!(complex128::project, parent)?)?;
+    parent.add_function(wrap_pyfunction!(complex128::kronecker, parent)?)?;
+    parent.add_function(wrap_pyfunction!(complex128::rotate, parent)?)?;
 
     parent.add_submodule(module)?;
     Ok(())
@@ -54,7 +57,7 @@ mod complex128 {
     ) -> PyResult<f64> {
         let array_1 = a.as_array();
         let array_2 = b.as_array();
-        Ok(super::pure::product(&array_1, &array_2))
+        Ok(super::naive::product(&array_1, &array_2))
     }
 
     #[pyfunction]
@@ -63,8 +66,45 @@ mod complex128 {
         a: np::PyReadonlyArray2<Complex<f64>>,
     ) -> &'py np::PyArray2<Complex<f64>> {
         let array_1 = a.as_array();
-        let array_2 = super::pure::normalize(&array_1);
+        let array_2 = super::naive::normalize(&array_1);
         let array_out = np::PyArray::from_owned_array(py, array_2);
+        array_out
+    }
+
+    #[pyfunction]
+    pub fn project<'py>(
+        py: Python<'py>,
+        a: np::PyReadonlyArray1<Complex<f64>>,
+    ) -> &'py np::PyArray2<Complex<f64>> {
+        let array_1 = a.as_array();
+        let array_2 = super::naive::project(&array_1);
+        let array_out = np::PyArray::from_owned_array(py, array_2);
+        array_out
+    }
+
+    #[pyfunction]
+    pub fn kronecker<'py>(
+        py: Python<'py>,
+        a: np::PyReadonlyArray2<Complex<f64>>,
+        b: np::PyReadonlyArray2<Complex<f64>>,
+    ) -> &'py np::PyArray2<Complex<f64>> {
+        let array_1 = a.as_array();
+        let array_2 = b.as_array();
+        let array_3 = super::naive::kronecker(&array_1, &array_2);
+        let array_out = np::PyArray::from_owned_array(py, array_3);
+        array_out
+    }
+
+    #[pyfunction]
+    pub fn rotate<'py>(
+        py: Python<'py>,
+        a: np::PyReadonlyArray2<Complex<f64>>,
+        b: np::PyReadonlyArray2<Complex<f64>>,
+    ) -> &'py np::PyArray2<Complex<f64>> {
+        let array_1 = a.as_array();
+        let array_2 = b.as_array();
+        let array_3 = super::naive::rotate(&array_1, &array_2);
+        let array_out = np::PyArray::from_owned_array(py, array_3);
         array_out
     }
 }

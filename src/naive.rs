@@ -38,3 +38,48 @@ where
         .and(&mtx2)
         .map_collect(|x, y| x / y.re.sqrt())
 }
+
+pub fn project<T>(a: &nd::ArrayView1<Complex<T>>) -> nd::Array2<Complex<T>>
+where
+    T: Float + 'static,
+{
+    let b = a.mapv(|x| x.conj()).insert_axis(nd::Axis(1));
+    // .zip(mtx1_conj.outer_iter()).map_collect(|(x, y)| x * y)
+    let a1 = a.insert_axis(nd::Axis(0));
+    b.dot(&a1)
+}
+
+pub fn kronecker<T>(
+    a: &nd::ArrayView2<Complex<T>>,
+    b: &nd::ArrayView2<Complex<T>>,
+) -> nd::Array2<Complex<T>>
+where
+    T: Float + 'static,
+{
+    let ddd1 = a.dim().0;
+    let ddd2 = b.dim().0;
+
+    let output_shape = (ddd1 * ddd2, ddd1 * ddd2);
+
+    let mut out_mtx = nd::Array::zeros((ddd1, ddd2, ddd1, ddd2));
+
+    for ((i1, j1), x) in a.indexed_iter() {
+        for ((i2, j2), y) in b.indexed_iter() {
+            out_mtx[[i1, i2, j1, j2]] = x * y;
+        }
+    }
+
+    out_mtx.into_shape(output_shape).unwrap()
+}
+
+pub fn rotate<T>(
+    rho2: &nd::ArrayView2<Complex<T>>,
+    unitary: &nd::ArrayView2<Complex<T>>,
+) -> nd::Array2<Complex<T>>
+where
+    T: Float + 'static,
+{
+    let unitary_conj_transpose = unitary.mapv(|x| x.conj()).reversed_axes();
+    let rho2a = rho2.dot(&unitary_conj_transpose);
+    unitary.dot(&rho2a)
+}
