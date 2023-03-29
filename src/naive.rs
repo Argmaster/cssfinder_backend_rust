@@ -19,10 +19,16 @@
 // OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use ndarray as nd;
+use ndarray_rand::rand_distr::StandardNormal;
 use num::Complex;
 use num_traits::Float;
+use rand::Rng;
+use rand_distr::{Distribution, Normal};
 
-pub fn product<T>(lhs: &nd::ArrayView2<Complex<T>>, rhs: &nd::ArrayView2<Complex<T>>) -> T
+pub fn product<T>(
+    lhs: &nd::ArrayView2<Complex<T>>,
+    rhs: &nd::ArrayView2<Complex<T>>,
+) -> T
 where
     T: Float + 'static,
 {
@@ -43,10 +49,12 @@ pub fn project<T>(a: &nd::ArrayView1<Complex<T>>) -> nd::Array2<Complex<T>>
 where
     T: Float + 'static,
 {
-    let b = a.mapv(|x| x.conj()).insert_axis(nd::Axis(1));
+    let length = a.len();
+    let b = a.mapv(|x| x.conj()).into_shape((length, 1)).unwrap();
     // .zip(mtx1_conj.outer_iter()).map_collect(|(x, y)| x * y)
-    let a1 = a.insert_axis(nd::Axis(0));
-    b.dot(&a1)
+    let a1 = a.into_shape((1, length)).unwrap();
+
+    b.dot(&a1).reversed_axes()
 }
 
 pub fn kronecker<T>(
@@ -82,4 +90,32 @@ where
     let unitary_conj_transpose = unitary.mapv(|x| x.conj()).reversed_axes();
     let rho2a = rho2.dot(&unitary_conj_transpose);
     unitary.dot(&rho2a)
+}
+
+pub fn get_random_haar_1d<T>(depth: usize) -> nd::Array1<Complex<T>>
+where
+    T: Float + 'static,
+    StandardNormal: Distribution<T>,
+{
+    let normal =
+        Normal::<T>::new(T::from(0.0).unwrap(), T::from(1.0).unwrap()).unwrap();
+
+    let rng_real = rand::thread_rng();
+    let real = rng_real
+        .sample_iter(&normal)
+        .take(depth)
+        .collect::<Vec<T>>();
+
+    let rng_imaginary = rand::thread_rng();
+    let imaginary = rng_imaginary
+        .sample_iter(&normal)
+        .take(depth)
+        .collect::<Vec<T>>();
+
+    let out = real
+        .into_iter()
+        .zip(imaginary.into_iter())
+        .map(|(r, i)| Complex::new(r, i));
+
+    nd::Array1::from_iter(out)
 }

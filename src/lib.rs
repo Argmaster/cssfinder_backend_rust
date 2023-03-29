@@ -39,6 +39,7 @@ fn register_complex128(py: Python, parent: &PyModule) -> PyResult<()> {
     parent.add_function(wrap_pyfunction!(complex128::project, parent)?)?;
     parent.add_function(wrap_pyfunction!(complex128::kronecker, parent)?)?;
     parent.add_function(wrap_pyfunction!(complex128::rotate, parent)?)?;
+    parent.add_function(wrap_pyfunction!(complex128::get_random_haar_1d, parent)?)?;
 
     parent.add_submodule(module)?;
     Ok(())
@@ -104,6 +105,13 @@ mod complex128 {
         let array_1 = a.as_array();
         let array_2 = b.as_array();
         let array_3 = super::naive::rotate(&array_1, &array_2);
+        let array_out = np::PyArray::from_owned_array(py, array_3);
+        array_out
+    }
+
+    #[pyfunction]
+    pub fn get_random_haar_1d(py: Python, a: usize) -> &np::PyArray1<Complex<f64>> {
+        let array_3 = super::naive::get_random_haar_1d(a);
         let array_out = np::PyArray::from_owned_array(py, array_3);
         array_out
     }
