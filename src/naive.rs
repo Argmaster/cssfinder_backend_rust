@@ -119,3 +119,24 @@ where
 
     nd::Array1::from_iter(out)
 }
+
+pub fn expand_d_fs<T>(
+    value: &nd::ArrayView2<Complex<T>>,
+    depth: usize,
+    quantity: usize,
+    idx: usize,
+) -> nd::Array2<Complex<T>>
+where
+    T: Float + 'static,
+{
+    let depth_1 = depth.pow(idx as u32);
+    let identity_1 = nd::Array::eye(depth_1);
+
+    let depth_2 = depth.pow((quantity - idx - 1) as u32);
+    let identity_2 = nd::Array::eye(depth_2);
+
+    let kronecker_1 = kronecker(&identity_1.view(), &value.view());
+    let kronecker_2 = kronecker(&kronecker_1.view(), &identity_2.view());
+
+    kronecker_2
+}

@@ -40,6 +40,7 @@ fn register_complex128(py: Python, parent: &PyModule) -> PyResult<()> {
     parent.add_function(wrap_pyfunction!(complex128::kronecker, parent)?)?;
     parent.add_function(wrap_pyfunction!(complex128::rotate, parent)?)?;
     parent.add_function(wrap_pyfunction!(complex128::get_random_haar_1d, parent)?)?;
+    parent.add_function(wrap_pyfunction!(complex128::expand_d_fs, parent)?)?;
 
     parent.add_submodule(module)?;
     Ok(())
@@ -102,9 +103,7 @@ mod complex128 {
         a: np::PyReadonlyArray2<Complex<f64>>,
         b: np::PyReadonlyArray2<Complex<f64>>,
     ) -> &'py np::PyArray2<Complex<f64>> {
-        let array_1 = a.as_array();
-        let array_2 = b.as_array();
-        let array_3 = super::naive::rotate(&array_1, &array_2);
+        let array_3 = super::naive::rotate(&a.as_array(), &b.as_array());
         let array_out = np::PyArray::from_owned_array(py, array_3);
         array_out
     }
@@ -112,6 +111,20 @@ mod complex128 {
     #[pyfunction]
     pub fn get_random_haar_1d(py: Python, a: usize) -> &np::PyArray1<Complex<f64>> {
         let array_3 = super::naive::get_random_haar_1d(a);
+        let array_out = np::PyArray::from_owned_array(py, array_3);
+        array_out
+    }
+
+    #[pyfunction]
+    pub fn expand_d_fs<'py>(
+        py: Python<'py>,
+        value: np::PyReadonlyArray2<Complex<f64>>,
+        depth: usize,
+        quantity: usize,
+        idx: usize,
+    ) -> &'py np::PyArray2<Complex<f64>> {
+        let array_3 =
+            super::naive::expand_d_fs(&value.as_array(), depth, quantity, idx);
         let array_out = np::PyArray::from_owned_array(py, array_3);
         array_out
     }

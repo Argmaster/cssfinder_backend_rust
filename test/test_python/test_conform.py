@@ -35,6 +35,10 @@ class ValidateConformance:
             np.random.random((self.size,)) + 1j * np.random.random((self.size,))
         ).astype(self.dtype)
 
+        self.mtx32 = (
+            np.random.random((32, 32)) + 1j * np.random.random((32, 32))
+        ).astype(self.dtype)
+
         self.limit = 1e-6
 
     def test_product(self) -> None:
@@ -126,6 +130,15 @@ class ValidateConformance:
         # ; plt.show()
 
         assert reference.shape == this.shape
+
+    def test_expand_d_fs(self) -> None:
+        """Validate expand_d_fs method."""
+
+        reference = self.reference.expand_d_fs(self.mtx32, 5, 2, 0)
+        this = self.this.expand_d_fs(self.mtx32, 5, 2, 0)
+
+        assert reference.shape == this.shape
+        assert (reference == this).all()
 
 
 class TestComplex128(ValidateConformance):
