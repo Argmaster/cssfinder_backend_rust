@@ -35,14 +35,12 @@ where
     lhs.dot(rhs).diag().mapv(|x| x.re).sum()
 }
 
-pub fn normalize<T>(mtx: &nd::ArrayView2<Complex<T>>) -> nd::Array2<Complex<T>>
+pub fn normalize<T>(vec: &nd::ArrayView1<Complex<T>>) -> nd::Array1<Complex<T>>
 where
     T: Float + 'static,
 {
-    let mtx2 = mtx.dot(&mtx.mapv(|x| x.conj()));
-    nd::Zip::from(mtx)
-        .and(&mtx2)
-        .map_collect(|x, y| x / y.re.sqrt())
+    let divisor = vec.dot(&vec.mapv(|x| x.conj())).re.sqrt();
+    nd::Zip::from(vec).map_collect(|x| x / divisor)
 }
 
 pub fn project<T>(a: &nd::ArrayView1<Complex<T>>) -> nd::Array2<Complex<T>>
@@ -120,6 +118,41 @@ where
     nd::Array1::from_iter(out)
 }
 
+pub fn get_random_haar_2d<T>(depth: usize, quantity: usize) -> nd::Array2<Complex<T>>
+where
+    T: Float + 'static,
+    StandardNormal: Distribution<T>,
+{
+    let normal =
+        Normal::<T>::new(T::from(0.0).unwrap(), T::from(1.0).unwrap()).unwrap();
+
+    let rng_real = rand::thread_rng();
+    let real = rng_real
+        .sample_iter(&normal)
+        .take(quantity * depth)
+        .collect::<Vec<T>>();
+
+    let real_array = nd::Array::from_shape_vec((quantity, depth), real).unwrap();
+
+    let rng_imaginary = rand::thread_rng();
+    let imaginary = rng_imaginary
+        .sample_iter(&normal)
+        .take(quantity * depth)
+        .collect::<Vec<T>>();
+
+    let imaginary_array =
+        nd::Array::from_shape_vec((quantity, depth), imaginary).unwrap();
+
+    let mut out = nd::Array::zeros((quantity, depth));
+
+    nd::Zip::from(&mut out)
+        .and(&real_array)
+        .and(&imaginary_array)
+        .for_each(|cell, &r, &i| *cell = Complex::new(r, i));
+
+    out
+}
+
 pub fn expand_d_fs<T>(
     value: &nd::ArrayView2<Complex<T>>,
     depth: usize,
@@ -140,3 +173,66 @@ where
 
     kronecker_2
 }
+
+pub fn random_unitary_d_fs<T>(
+    depth: usize,
+    quantity: usize,
+    idx: usize,
+) -> nd::Array2<Complex<T>>
+where
+    T: Float + 'static,
+    StandardNormal: Distribution<T>,
+{
+    let value = _random_unitary_d_fs::<T>(depth);
+    let mtx = expand_d_fs(&value.view(), depth, quantity, idx);
+    mtx
+}
+
+pub fn _random_unitary_d_fs<T>(depth: usize) -> nd::Array2<Complex<T>>
+where
+    T: Float + 'static,
+    StandardNormal: Distribution<T>,
+{
+    let random_mtx = get_random_haar_2d(depth, 1);
+    let identity_mtx = nd::Array2::<Complex<T>>::eye(depth);
+
+    let value = _value::<T>();
+    let rand_mul = random_mtx.mapv(|x| value * x);
+
+    rand_mul + identity_mtx
+}
+
+pub fn _value<T>() -> Complex<T>
+where
+    T: Float + 'static,
+{
+    use std::f64::consts::PI;
+
+    let real = T::from(0.01 * PI).unwrap();
+    let imaginary = T::from(0.01 * PI).unwrap();
+
+    Complex::new(real.cos(), imaginary.sin() - T::one())
+}
+
+// pub fn random_d_fs<T>(depth: usize, quantity: usize) -> nd::Array2<Complex<T>>
+// where
+//     T: Float + 'static,
+//     StandardNormal: Distribution<T>,
+// {
+//     let rand_vectors = get_random_haar_2d::<T>(depth, quantity);
+//     let mut vector = normalize(&rand_vectors.slice(nd::s![0, ..]).view());
+//
+//     for i in 1..quantity {
+//         let idx_vector = normalize(&rand_vectors.slice(nd::s![i, ..]).view());
+//         let outer_product = vector
+//             .outer_iter()
+//             .product(idx_vector.outer_iter());
+//         let flattened: Vec<Complex<T>> = outer_product.map(|(x, y)| x * y).collect();
+//         vector = nd::Array::from_shape_vec((depth.pow(quantity as u32),), flattened)
+//             .unwrap();
+//     }
+//
+//     let result = project(&vector.view());
+//
+//     result
+// }

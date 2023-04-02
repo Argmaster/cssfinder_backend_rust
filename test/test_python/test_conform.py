@@ -57,10 +57,10 @@ class ValidateConformance:
     def test_normalize(self) -> None:
         """Validate normalize return value."""
 
-        a = self.reference.normalize(self.lhs_mtx)
-        b = self.this.normalize(self.lhs_mtx)
+        a = self.reference.normalize(self.lhs_vec)
+        b = self.this.normalize(self.lhs_vec)
 
-        print(self.lhs_mtx)
+        print(self.lhs_vec)
         print("Reference", a)
         print("This", b)
 
@@ -131,6 +131,22 @@ class ValidateConformance:
 
         assert reference.shape == this.shape
 
+    def test_get_random_haar_2d(self) -> None:
+        """Validate vector sampling."""
+
+        reference = self.reference.get_random_haar_2d(100_000, self.size).mean(axis=0)
+        this = self.this.get_random_haar_2d(100_000, self.size).mean(axis=0)
+
+        print(this.shape, reference.shape)
+
+        right = max(reference.max(), this.max())
+
+        plt.hist(reference, 6, alpha=0.5, range=(0, right), color="blue")
+        plt.hist(this, 6, alpha=0.5, range=(0, right), color="red")
+        # ; plt.show()
+
+        assert reference.shape == this.shape
+
     def test_expand_d_fs(self) -> None:
         """Validate expand_d_fs method."""
 
@@ -140,6 +156,35 @@ class ValidateConformance:
         assert reference.shape == this.shape
         assert (reference == this).all()
 
+    def test_random_unitary_d_fs(self) -> None:
+        """Validate vector sampling."""
+
+        reference = self.reference.random_unitary_d_fs(5, 2, 0)
+        this = self.this.random_unitary_d_fs(5, 2, 0)
+
+        print("Reference:\n", reference.round(2))
+        print("Reference:\n", this.round(2))
+
+        # Check shape of matrices
+        assert reference.shape == this.shape
+        # Check layout of matrices
+        assert (reference.astype(np.bool8) == this.astype(np.bool8)).all()
+
+        print(
+            reference_mean := np.array(
+                [self.reference.random_unitary_d_fs(5, 2, 0) for _ in range(20_000)]
+            ).mean()
+        )
+        print(
+            this_mean := np.array(
+                [self.this.random_unitary_d_fs(5, 2, 0) for _ in range(20_000)]
+            ).mean()
+        )
+
+        assert reference_mean.round(2) == this_mean.round(2)
+
+    def test_noop(self) -> None:
+        self.this.noop()
 
 class TestComplex128(ValidateConformance):
     this = rust_c128

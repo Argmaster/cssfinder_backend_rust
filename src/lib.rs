@@ -40,7 +40,10 @@ fn register_complex128(py: Python, parent: &PyModule) -> PyResult<()> {
     parent.add_function(wrap_pyfunction!(complex128::kronecker, parent)?)?;
     parent.add_function(wrap_pyfunction!(complex128::rotate, parent)?)?;
     parent.add_function(wrap_pyfunction!(complex128::get_random_haar_1d, parent)?)?;
+    parent.add_function(wrap_pyfunction!(complex128::get_random_haar_2d, parent)?)?;
     parent.add_function(wrap_pyfunction!(complex128::expand_d_fs, parent)?)?;
+    parent.add_function(wrap_pyfunction!(complex128::random_unitary_d_fs, parent)?)?;
+    parent.add_function(wrap_pyfunction!(complex128::noop, parent)?)?;
 
     parent.add_submodule(module)?;
     Ok(())
@@ -65,8 +68,8 @@ mod complex128 {
     #[pyfunction]
     pub fn normalize<'py>(
         py: Python<'py>,
-        a: np::PyReadonlyArray2<Complex<f64>>,
-    ) -> &'py np::PyArray2<Complex<f64>> {
+        a: np::PyReadonlyArray1<Complex<f64>>,
+    ) -> &'py np::PyArray1<Complex<f64>> {
         let array_1 = a.as_array();
         let array_2 = super::naive::normalize(&array_1);
         let array_out = np::PyArray::from_owned_array(py, array_2);
@@ -116,6 +119,17 @@ mod complex128 {
     }
 
     #[pyfunction]
+    pub fn get_random_haar_2d(
+        py: Python,
+        depth: usize,
+        quantity: usize,
+    ) -> &np::PyArray2<Complex<f64>> {
+        let array_3 = super::naive::get_random_haar_2d(depth, quantity);
+        let array_out = np::PyArray::from_owned_array(py, array_3);
+        array_out
+    }
+
+    #[pyfunction]
     pub fn expand_d_fs<'py>(
         py: Python<'py>,
         value: np::PyReadonlyArray2<Complex<f64>>,
@@ -127,5 +141,36 @@ mod complex128 {
             super::naive::expand_d_fs(&value.as_array(), depth, quantity, idx);
         let array_out = np::PyArray::from_owned_array(py, array_3);
         array_out
+    }
+
+    #[pyfunction]
+    pub fn random_unitary_d_fs(
+        py: Python,
+        depth: usize,
+        quantity: usize,
+        idx: usize,
+    ) -> &np::PyArray2<Complex<f64>> {
+        let array_3 = super::naive::random_unitary_d_fs(depth, quantity, idx);
+        let array_out = np::PyArray::from_owned_array(py, array_3);
+        array_out
+    }
+
+    #[pyfunction]
+    pub fn noop(_py: Python) -> PyResult<()> {
+        use ndarray as nd;
+        let a = nd::array!([1, 2, 3]);
+        let b = nd::array!([3, 2, 1]);
+
+        let a_len = a.len();
+        let b_len = b.len();
+
+        let a1 = a.into_shape((a_len, 1)).unwrap();
+        let b1 = b.into_shape((1, b_len)).unwrap();
+
+        let c = b1.dot(&a1).into_shape(a_len * b_len);
+
+        println!("{:?}", c);
+
+        Ok(())
     }
 }
