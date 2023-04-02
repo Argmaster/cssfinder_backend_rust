@@ -43,6 +43,7 @@ fn register_complex128(py: Python, parent: &PyModule) -> PyResult<()> {
     parent.add_function(wrap_pyfunction!(complex128::get_random_haar_2d, parent)?)?;
     parent.add_function(wrap_pyfunction!(complex128::expand_d_fs, parent)?)?;
     parent.add_function(wrap_pyfunction!(complex128::random_unitary_d_fs, parent)?)?;
+    parent.add_function(wrap_pyfunction!(complex128::random_d_fs, parent)?)?;
     parent.add_function(wrap_pyfunction!(complex128::noop, parent)?)?;
 
     parent.add_submodule(module)?;
@@ -151,6 +152,17 @@ mod complex128 {
         idx: usize,
     ) -> &np::PyArray2<Complex<f64>> {
         let array_3 = super::naive::random_unitary_d_fs(depth, quantity, idx);
+        let array_out = np::PyArray::from_owned_array(py, array_3);
+        array_out
+    }
+
+    #[pyfunction]
+    pub fn random_d_fs(
+        py: Python,
+        depth: usize,
+        quantity: usize,
+    ) -> &np::PyArray2<Complex<f64>> {
+        let array_3 = super::naive::random_d_fs(depth, quantity);
         let array_out = np::PyArray::from_owned_array(py, array_3);
         array_out
     }

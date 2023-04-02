@@ -101,8 +101,8 @@ class ValidateConformance:
         b = self.this.rotate(self.lhs_mtx, self.rhs_mtx)
 
         print(self.lhs_vec)
-        print("Reference", a)
-        print("This", b)
+        print("Reference:\n", a.round(2))
+        print("This:\n", b.round(2))
 
         assert a.shape == b.shape
         assert (np.abs(a - b) < self.limit).conj().all()
@@ -153,6 +153,9 @@ class ValidateConformance:
         reference = self.reference.expand_d_fs(self.mtx32, 5, 2, 0)
         this = self.this.expand_d_fs(self.mtx32, 5, 2, 0)
 
+        print("Reference:\n", reference.round(2))
+        print("This:\n", this.round(2))
+
         assert reference.shape == this.shape
         assert (reference == this).all()
 
@@ -163,7 +166,7 @@ class ValidateConformance:
         this = self.this.random_unitary_d_fs(5, 2, 0)
 
         print("Reference:\n", reference.round(2))
-        print("Reference:\n", this.round(2))
+        print("This:\n", this.round(2))
 
         # Check shape of matrices
         assert reference.shape == this.shape
@@ -183,8 +186,41 @@ class ValidateConformance:
 
         assert reference_mean.round(2) == this_mean.round(2)
 
+    def test_random_d_fs(self) -> None:
+        reference = self.reference.random_d_fs(5, 2)
+        this = self.this.random_d_fs(5, 2)
+        with np.printoptions(precision=3, suppress=True, linewidth=1000):
+            print("Reference:\n", reference.round(2))
+            print("This:\n", this.round(2))
+
+        # Check shape of matrices
+        assert reference.shape == this.shape
+
+        reference_multi_sample = np.array(
+            [self.reference.random_d_fs(5, 2) for _ in range(20000)]
+        )
+        this_multi_sample = np.array(
+            [self.this.random_d_fs(5, 2) for _ in range(20000)]
+        )
+
+        with np.printoptions(precision=3, suppress=True, linewidth=1000):
+            print("Reference:\n", (reference_multi_sample.sum(0) > 0).astype(np.int32))
+            print("This:\n", (this_multi_sample.sum(0) > 0).astype(np.int32))
+
+        # Check if matrix is symmetric
+        assert (
+            np.triu(this_multi_sample.sum(0) > 0).T
+            == np.tril(this_multi_sample.sum(0) > 0)
+        ).all()
+
+        print(reference_mean := reference_multi_sample.mean())
+        print(this_mean := this_multi_sample.mean())
+
+        assert reference_mean.round(2) == this_mean.round(2)
+
     def test_noop(self) -> None:
         self.this.noop()
+
 
 class TestComplex128(ValidateConformance):
     this = rust_c128

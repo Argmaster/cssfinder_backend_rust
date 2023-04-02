@@ -214,25 +214,31 @@ where
     Complex::new(real.cos(), imaginary.sin() - T::one())
 }
 
-// pub fn random_d_fs<T>(depth: usize, quantity: usize) -> nd::Array2<Complex<T>>
-// where
-//     T: Float + 'static,
-//     StandardNormal: Distribution<T>,
-// {
-//     let rand_vectors = get_random_haar_2d::<T>(depth, quantity);
-//     let mut vector = normalize(&rand_vectors.slice(nd::s![0, ..]).view());
-//
-//     for i in 1..quantity {
-//         let idx_vector = normalize(&rand_vectors.slice(nd::s![i, ..]).view());
-//         let outer_product = vector
-//             .outer_iter()
-//             .product(idx_vector.outer_iter());
-//         let flattened: Vec<Complex<T>> = outer_product.map(|(x, y)| x * y).collect();
-//         vector = nd::Array::from_shape_vec((depth.pow(quantity as u32),), flattened)
-//             .unwrap();
-//     }
-//
-//     let result = project(&vector.view());
-//
-//     result
-// }
+pub fn random_d_fs<T>(depth: usize, quantity: usize) -> nd::Array2<Complex<T>>
+where
+    T: Float + 'static,
+    StandardNormal: Distribution<T>,
+{
+    let rand_vectors = get_random_haar_2d::<T>(depth, quantity);
+
+    let mut vector = normalize(&rand_vectors.slice(nd::s![0, ..]).view())
+        .into_shape((depth, 1))
+        .unwrap();
+    let mut width = depth;
+
+    for i in 1..quantity {
+        let idx_vector = normalize(&rand_vectors.slice(nd::s![i, ..]).view())
+            .into_shape((1, depth))
+            .unwrap();
+
+        width *= depth;
+
+        // dot on column vector and row vector gives a matrix.
+        let outer_product = vector.dot(&idx_vector);
+
+        // flatten into vector, with every iteration vector gets longer.
+        vector = outer_product.into_shape((width, 1)).unwrap();
+    }
+
+    project(&vector.view().into_shape((width,)).unwrap())
+}
