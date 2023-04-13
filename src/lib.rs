@@ -21,6 +21,7 @@
 use pyo3::prelude::*;
 
 mod naive;
+mod shared;
 
 /// A Python module implemented in Rust.
 #[pymodule]
@@ -44,7 +45,10 @@ fn register_complex128(py: Python, parent: &PyModule) -> PyResult<()> {
     parent.add_function(wrap_pyfunction!(complex128::expand_d_fs, parent)?)?;
     parent.add_function(wrap_pyfunction!(complex128::random_unitary_d_fs, parent)?)?;
     parent.add_function(wrap_pyfunction!(complex128::random_d_fs, parent)?)?;
+    parent.add_function(wrap_pyfunction!(complex128::optimize_d_fs, parent)?)?;
     parent.add_function(wrap_pyfunction!(complex128::noop, parent)?)?;
+
+    parent.add_class::<complex128::NaiveRustBackend>()?;
 
     parent.add_submodule(module)?;
     Ok(())
@@ -168,6 +172,26 @@ mod complex128 {
     }
 
     #[pyfunction]
+    pub fn optimize_d_fs<'py>(
+        py: Python<'py>,
+        new_state: np::PyReadonlyArray2<Complex<f64>>,
+        visibility_state: np::PyReadonlyArray2<Complex<f64>>,
+        depth: usize,
+        quantity: usize,
+        updates_count: usize,
+    ) -> &'py np::PyArray2<Complex<f64>> {
+        let array_out = super::naive::optimize_d_fs(
+            &new_state.as_array(),
+            &visibility_state.as_array(),
+            depth,
+            quantity,
+            updates_count,
+        );
+        let array_out_py = np::PyArray::from_owned_array(py, array_out);
+        array_out_py
+    }
+
+    #[pyfunction]
     pub fn noop(_py: Python) -> PyResult<()> {
         use ndarray as nd;
         let a = nd::array!([1, 2, 3]);
@@ -184,5 +208,80 @@ mod complex128 {
         println!("{:?}", c);
 
         Ok(())
+    }
+
+    #[pyclass]
+    pub struct NaiveRustBackend {
+        backend: super::naive::RustBackend<f64>,
+    }
+
+    #[pymethods]
+    impl NaiveRustBackend {
+        #[new]
+        fn new(
+            initial: np::PyReadonlyArray2<Complex<f64>>,
+            depth: usize,
+            quantity: usize,
+            mode: super::shared::AlgoMode,
+            visibility: f64,
+        ) -> Self {
+            let state_array = initial.as_array();
+
+            let backend = crate::naive::RustBackend::<f64>::new(
+                &state_array,
+                depth,
+                quantity,
+                mode,
+                visibility,
+            );
+
+            NaiveRustBackend { backend }
+        }
+
+        fn set_symmetries(
+            &mut self,
+            symmetries: Vec<Vec<np::PyReadonlyArray2<Complex<f64>>>>,
+        ) {
+            use ndarray as nd;
+
+            let symmetries_local = symmetries
+                .into_iter()
+                .map(|inner_vec| {
+                    inner_vec
+                        .into_iter()
+                        .map(|pyarray| {
+                            let array_ref = pyarray.as_array();
+                            let array: nd::Array2<Complex<f64>> = array_ref.to_owned();
+                            array
+                        })
+                        .collect()
+                })
+                .collect();
+            self.backend.set_symmetries(symmetries_local);
+        }
+
+        fn set_projection(&mut self, projection: np::PyReadonlyArray2<Complex<f64>>) {
+            println!("{:?}", projection);
+        }
+
+        fn get_state<'py>(
+            &self,
+            py: Python<'py>,
+        ) -> PyResult<&'py np::PyArray2<Complex<f64>>> {
+            let array_out = self.backend.get_state();
+            Ok(np::PyArray::from_owned_array(py, array_out.to_owned()))
+        }
+
+        fn get_corrections(&self) -> PyResult<Vec<(usize, usize, f64)>> {
+            Ok(self.backend.get_corrections().to_owned())
+        }
+
+        fn get_corrections_count(&self) -> PyResult<usize> {
+            Ok(self.backend.get_corrections().len())
+        }
+
+        fn run_epoch(&mut self, iterations: i64, epoch_index: usize) {
+            self.backend.run_epoch(iterations, epoch_index)
+        }
     }
 }

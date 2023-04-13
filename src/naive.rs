@@ -18,12 +18,18 @@
 // CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 // OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+use std::any;
+use std::fmt;
+use std::ops::Sub;
+
 use ndarray as nd;
 use ndarray_rand::rand_distr::StandardNormal;
 use num::Complex;
 use num_traits::Float;
 use rand::Rng;
 use rand_distr::{Distribution, Normal};
+
+use crate::shared::AlgoMode;
 
 pub fn product<T>(
     lhs: &nd::ArrayView2<Complex<T>>,
@@ -241,4 +247,253 @@ where
     }
 
     project(&vector.view().into_shape((width,)).unwrap())
+}
+
+pub fn optimize_d_fs<T>(
+    new_state: &nd::ArrayView2<Complex<T>>,
+    visibility_state: &nd::ArrayView2<Complex<T>>,
+    depth: usize,
+    quantity: usize,
+    updates_count: usize,
+) -> nd::Array2<Complex<T>>
+where
+    T: Float + 'static,
+    StandardNormal: Distribution<T>,
+{
+    let mut product_2_3 = product(new_state, visibility_state);
+    let mut unitary = random_unitary_d_fs(depth, quantity, 0);
+    let mut rotated_2 = rotate(new_state, &unitary.view());
+
+    for idx in 0..updates_count {
+        let idx_mod = idx % quantity;
+        unitary = random_unitary_d_fs(depth, quantity, idx_mod);
+        rotated_2 = rotate(new_state, &unitary.view());
+
+        let product_rot2_3 = product(&rotated_2.view(), visibility_state);
+
+        if product_2_3 > product_rot2_3 {
+            unitary = unitary.mapv(|x| x.conj()).t().to_owned();
+            rotated_2 = rotate(new_state, &unitary.view());
+        }
+
+        let mut new_product_2_3 = product_rot2_3;
+
+        while new_product_2_3 > product_2_3 {
+            product_2_3 = new_product_2_3;
+            rotated_2 = rotate(&rotated_2.view(), &unitary.view());
+            new_product_2_3 = product(&rotated_2.view(), visibility_state);
+        }
+    }
+
+    rotated_2
+}
+
+/*
+ ████   ███   ████ █   █ █████ █    █ ████      ████ █      ███   ████  ████
+ █   █ █   █ █     █  █  █     ██   █ █   █    █     █     █   █ █     █
+ ████  █████ █     ███   ███   █ █  █ █   █    █     █     █████  ███   ███
+ █   █ █   █ █     █  █  █     █  █ █ █   █    █     █     █   █     █     █
+ ████  █   █  ████ █   █ █████ █   ██ ████      ████ █████ █   █ ████  ████
+*/
+
+#[derive(Clone)]
+pub struct RustBackend<T> {
+    initial: nd::Array2<Complex<T>>,
+    depth: usize,
+    quantity: usize,
+
+    visibility: nd::Array2<Complex<T>>,
+    intermediate: nd::Array2<Complex<T>>,
+    visibility_reduced: nd::Array2<Complex<T>>,
+
+    symmetries: Option<Vec<Vec<nd::Array2<Complex<T>>>>>,
+    projection: Option<nd::Array2<Complex<T>>>,
+
+    aa4: T,
+    aa6: T,
+    dd1: T,
+
+    optimize_callback: fn(
+        &nd::ArrayView2<Complex<T>>,
+        &nd::ArrayView2<Complex<T>>,
+        usize,
+        usize,
+        usize,
+    ) -> nd::Array2<Complex<T>>,
+
+    corrections: Vec<(usize, usize, T)>,
+    // Specified at the very bottom to match construction argument order. It can not
+    // be passed during construction before `optimize_callback` as it uses match on mode
+    // the mode otherwise would be moved, thus requiring a clone.
+    mode: AlgoMode,
+}
+
+impl<T> fmt::Debug for RustBackend<T>
+where
+    T: Float + 'static,
+    StandardNormal: Distribution<T>,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "RustBackend<{}>(depth: {}, quantity: {}, state-size: {})",
+            any::type_name::<T>(),
+            self.depth,
+            self.quantity,
+            self.initial.len_of(nd::Axis(0))
+        )
+    }
+}
+
+impl<T> RustBackend<T>
+where
+    T: Float + 'static,
+    StandardNormal: Distribution<T>,
+{
+    pub fn new(
+        initial: &nd::ArrayView2<Complex<T>>,
+        depth: usize,
+        quantity: usize,
+        mode: AlgoMode,
+        visibility: T,
+    ) -> Self
+    where
+        T: Float + 'static,
+    {
+        let visibility_matrix =
+            RustBackend::create_visibility_matrix(&initial.view(), visibility);
+        let intermediate_matrix =
+            RustBackend::create_intermediate_state(&visibility_matrix.view());
+
+        let visibility_reduced =
+            visibility_matrix.view().sub(&intermediate_matrix.view());
+
+        let aa4 = product(&visibility_matrix.view(), &intermediate_matrix.view());
+        let aa6 = product(&intermediate_matrix.view(), &intermediate_matrix.view());
+        let dd1 = product(&intermediate_matrix.view(), &visibility_matrix.view());
+
+        let instance = RustBackend {
+            initial: initial.to_owned(),
+
+            depth,
+            quantity,
+
+            visibility: visibility_matrix,
+            intermediate: intermediate_matrix,
+            visibility_reduced: visibility_reduced,
+
+            symmetries: None,
+            projection: None,
+
+            corrections: vec![],
+
+            optimize_callback: match mode {
+                AlgoMode::FSnQd => optimize_d_fs,
+                AlgoMode::SBiPa => panic!("Mode 'SBiPa' is currently not supported."),
+                AlgoMode::G3PaE3qD => {
+                    panic!("Mode 'G3PaE3qD' is currently not supported.")
+                }
+                AlgoMode::G4PaE3qD => {
+                    panic!("Mode 'G4PaE3qD' is currently not supported.")
+                }
+            },
+
+            aa4,
+            aa6,
+            dd1,
+
+            mode,
+        };
+
+        instance
+    }
+
+    fn create_visibility_matrix(
+        initial: &nd::ArrayView2<Complex<T>>,
+        visibility: T,
+    ) -> nd::Array2<Complex<T>> {
+        let length_of_first_axis = initial.len_of(nd::Axis(0));
+        let array_size_complex =
+            Complex::<T>::new(T::from(length_of_first_axis).unwrap(), T::zero());
+
+        let vis_state = initial.mapv(|x| x * visibility);
+        let identity = nd::Array2::<Complex<T>>::eye(length_of_first_axis);
+
+        let inverted_vis = T::one() - visibility;
+        nd::Zip::from(&vis_state)
+            .and(&identity)
+            .map_collect(|v, i| (v + (*i * inverted_vis)) / array_size_complex);
+
+        initial.to_owned()
+    }
+
+    fn create_intermediate_state(
+        visibility_matrix: &nd::ArrayView2<Complex<T>>,
+    ) -> nd::Array2<Complex<T>> {
+        let length_of_first_axis = visibility_matrix.len_of(nd::Axis(0));
+        let mut intermediate_state = nd::Array2::<Complex<T>>::zeros((
+            length_of_first_axis,
+            length_of_first_axis,
+        ));
+
+        for i in 0..length_of_first_axis {
+            intermediate_state[[i, i]] = visibility_matrix[[i, i]];
+        }
+
+        intermediate_state
+    }
+
+    pub fn set_symmetries(&mut self, symmetries: Vec<Vec<nd::Array2<Complex<T>>>>) {
+        self.symmetries = Some(symmetries);
+    }
+
+    pub fn get_state(&self) -> &nd::Array2<Complex<T>> {
+        &self.intermediate
+    }
+
+    pub fn get_corrections(&self) -> &Vec<(usize, usize, T)> {
+        &self.corrections
+    }
+
+    pub fn run_epoch(&mut self, iterations: i64, epoch_index: usize) {
+        let depth = self.depth;
+        let quantity = self.quantity;
+        let epochs = 20 * depth * depth * quantity;
+
+        for iteration_index in 0..iterations {
+            let alternative_state = match self.mode {
+                AlgoMode::FSnQd => random_d_fs(depth, quantity),
+                AlgoMode::SBiPa => panic!("Mode 'SBiPa' is currently not supported."),
+                AlgoMode::G3PaE3qD => {
+                    panic!("Mode 'G3PaE3qD' is currently not supported.")
+                }
+                AlgoMode::G4PaE3qD => {
+                    panic!("Mode 'G4PaE3qD' is currently not supported.")
+                }
+            };
+
+            if product(&alternative_state.view(), &self.visibility_reduced.view())
+                > self.dd1
+            {
+                self.update_state(
+                    &alternative_state,
+                    iterations,
+                    epoch_index,
+                    epochs,
+                    iteration_index,
+                );
+            }
+        }
+    }
+
+    fn update_state(
+        &mut self,
+        alternative_state: &ndarray::Array2<Complex<T>>,
+        iterations: i64,
+        epoch_index: usize,
+        epochs: usize,
+        iteration_index: i64,
+    ) {
+        // Add the implementation of _update_state here.
+    }
 }

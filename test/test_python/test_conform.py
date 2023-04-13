@@ -3,6 +3,8 @@ from typing import ClassVar
 import cssfinder_backend_numpy.numpy._complex128 as numpy_c128
 import cssfinder_backend_rust as rust_c128
 import numpy as np
+from cssfinder.algorithm.backend.base import BackendBase
+from cssfinder.cssfproject import AlgoMode
 from cssfinder_backend_numpy.impl import Implementation
 from matplotlib import pyplot as plt
 
@@ -226,3 +228,34 @@ class TestComplex128(ValidateConformance):
     this = rust_c128
     reference = numpy_c128
     dtype = np.complex128
+
+
+class TestBackendClass:
+    def get_backend_instance(self) -> BackendBase:
+        return rust_c128.NaiveRustBackend(
+            np.identity(32).astype(np.complex128),
+            2,
+            5,
+            AlgoMode.FSnQd,
+            0.4,
+        )
+
+    def test_backend_set_symmetries(self) -> None:
+        instance = self.get_backend_instance()
+        instance.set_symmetries([[np.identity(32).astype(np.complex128)]])
+
+    def test_backend_set_projection(self) -> None:
+        instance = self.get_backend_instance()
+        instance.set_projection(np.identity(32).astype(np.complex128))
+
+    def test_backend_get_state(self) -> None:
+        instance = self.get_backend_instance()
+        assert (instance.get_state() == np.identity(32).astype(np.complex128)).all()
+
+    def test_backend_get_corrections(self) -> None:
+        instance = self.get_backend_instance()
+        assert instance.get_corrections() == []
+
+    def test_backend_run_epoch(self) -> None:
+        instance = self.get_backend_instance()
+        instance.run_epoch(16, 0)
