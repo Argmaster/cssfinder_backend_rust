@@ -45,6 +45,7 @@ class ValidateConformance:
 
     def test_product(self) -> None:
         """Validate product return value."""
+        assert (self.lhs_mtx != self.rhs_mtx).all()
 
         a = self.reference.product(self.lhs_mtx, self.rhs_mtx)
         b = self.this.product(self.lhs_mtx, self.rhs_mtx)
@@ -114,38 +115,23 @@ class ValidateConformance:
 
         reference = np.array(
             [
-                np.abs(self.reference.get_random_haar_1d(self.size).sum())
-                for _ in range(100_000)
+                self.reference.get_random_haar_1d(self.size)
+                for _ in range(1_000)
             ]
-        )
+        ).flatten()
         this = np.array(
             [
-                np.abs(self.this.get_random_haar_1d(self.size).sum())
-                for _ in range(100_000)
+                self.this.get_random_haar_1d(self.size)
+                for _ in range(1_000)
             ]
-        )
+        ).flatten()
 
         right = max(reference.max(), this.max())
+        left = min(reference.min(), this.min())
 
-        plt.hist(reference, 6, alpha=0.5, range=(0, right), color="blue")
-        plt.hist(this, 6, alpha=0.5, range=(0, right), color="red")
-        # ; plt.show()
-
-        assert reference.shape == this.shape
-
-    def test_get_random_haar_2d(self) -> None:
-        """Validate vector sampling."""
-
-        reference = self.reference.get_random_haar_2d(100_000, self.size).mean(axis=0)
-        this = self.this.get_random_haar_2d(100_000, self.size).mean(axis=0)
-
-        print(this.shape, reference.shape)
-
-        right = max(reference.max(), this.max())
-
-        plt.hist(reference, 6, alpha=0.5, range=(0, right), color="blue")
-        plt.hist(this, 6, alpha=0.5, range=(0, right), color="red")
-        # ; plt.show()
+        plt.hist(reference, 100, alpha=0.5, range=(-2.0, 6.0), color="blue")
+        plt.hist(this, 100, alpha=0.5, range=(-2.0, 6.0), color="red")
+        plt.show()
 
         assert reference.shape == this.shape
 

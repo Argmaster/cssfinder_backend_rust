@@ -18,7 +18,7 @@
 // CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 // OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use pyo3::prelude::*;
+use pyo3::{prelude::*, types::PyDict};
 
 mod naive;
 mod shared;
@@ -28,6 +28,34 @@ mod shared;
 fn cssfinder_backend_rust(py: Python, m: &PyModule) -> PyResult<()> {
     register_complex128(py, m)?;
     m.add("__version__", "0.1.0")?;
+
+    #[pyfunction]
+    fn export_backend(py: Python) -> &PyDict {
+        Python::with_gil(|_py| {
+            let cssfinder_cssfproject =
+                PyModule::import(py, "cssfinder.cssfproject").unwrap();
+            let precision_enum = cssfinder_cssfproject.getattr("Precision").unwrap();
+
+            let cssfinder_backend_rust_module =
+                PyModule::import(py, "cssfinder_backend_rust").unwrap();
+
+            let backend_class = cssfinder_backend_rust_module
+                .getattr("NaiveRustBackend")
+                .unwrap();
+
+            let backends_dict = PyDict::new(py);
+
+            backends_dict
+                .set_item(
+                    ("rust_naive", precision_enum.getattr("DOUBLE").unwrap()),
+                    backend_class,
+                )
+                .unwrap();
+
+            backends_dict
+        })
+    }
+    m.add_function(wrap_pyfunction!(export_backend, m)?)?;
 
     Ok(())
 }
@@ -41,7 +69,6 @@ fn register_complex128(py: Python, parent: &PyModule) -> PyResult<()> {
     parent.add_function(wrap_pyfunction!(complex128::kronecker, parent)?)?;
     parent.add_function(wrap_pyfunction!(complex128::rotate, parent)?)?;
     parent.add_function(wrap_pyfunction!(complex128::get_random_haar_1d, parent)?)?;
-    parent.add_function(wrap_pyfunction!(complex128::get_random_haar_2d, parent)?)?;
     parent.add_function(wrap_pyfunction!(complex128::expand_d_fs, parent)?)?;
     parent.add_function(wrap_pyfunction!(complex128::random_unitary_d_fs, parent)?)?;
     parent.add_function(wrap_pyfunction!(complex128::random_d_fs, parent)?)?;
@@ -51,6 +78,7 @@ fn register_complex128(py: Python, parent: &PyModule) -> PyResult<()> {
     parent.add_class::<complex128::NaiveRustBackend>()?;
 
     parent.add_submodule(module)?;
+
     Ok(())
 }
 
@@ -119,17 +147,6 @@ mod complex128 {
     #[pyfunction]
     pub fn get_random_haar_1d(py: Python, a: usize) -> &np::PyArray1<Complex<f64>> {
         let array_3 = super::naive::get_random_haar_1d(a);
-        let array_out = np::PyArray::from_owned_array(py, array_3);
-        array_out
-    }
-
-    #[pyfunction]
-    pub fn get_random_haar_2d(
-        py: Python,
-        depth: usize,
-        quantity: usize,
-    ) -> &np::PyArray2<Complex<f64>> {
-        let array_3 = super::naive::get_random_haar_2d(depth, quantity);
         let array_out = np::PyArray::from_owned_array(py, array_3);
         array_out
     }
@@ -224,8 +241,10 @@ mod complex128 {
             quantity: usize,
             mode: super::shared::AlgoMode,
             visibility: f64,
+            is_debug: Option<bool>,
         ) -> Self {
             let state_array = initial.as_array();
+            assert!(is_debug.unwrap_or(false) || !is_debug.unwrap_or(false));
 
             let backend = crate::naive::RustBackend::<f64>::new(
                 &state_array,
