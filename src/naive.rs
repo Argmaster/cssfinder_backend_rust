@@ -30,10 +30,7 @@ use rand::Rng;
 
 use crate::shared::AlgoMode;
 
-pub fn product<T>(
-    lhs: &nd::ArrayView2<Complex<T>>,
-    rhs: &nd::ArrayView2<Complex<T>>,
-) -> T
+pub fn product<T>(lhs: &nd::Array2<Complex<T>>, rhs: &nd::Array2<Complex<T>>) -> T
 where
     T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
 {
@@ -48,7 +45,7 @@ where
     result
 }
 
-pub fn normalize<T>(vec: &nd::ArrayView1<Complex<T>>) -> nd::Array1<Complex<T>>
+pub fn normalize<T>(vec: &nd::Array1<Complex<T>>) -> nd::Array1<Complex<T>>
 where
     T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
 {
@@ -56,21 +53,21 @@ where
     nd::Zip::from(vec).map_collect(|x| x / divisor)
 }
 
-pub fn project<T>(a: &nd::ArrayView1<Complex<T>>) -> nd::Array2<Complex<T>>
+pub fn project<T>(a: &nd::Array1<Complex<T>>) -> nd::Array2<Complex<T>>
 where
     T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
 {
     let length = a.len();
     let b = a.mapv(|x| x.conj()).into_shape((length, 1)).unwrap();
     // .zip(mtx1_conj.outer_iter()).map_collect(|(x, y)| x * y)
-    let a1 = a.into_shape((1, length)).unwrap();
+    let a1 = a.clone().into_shape((1, length)).unwrap();
 
     b.dot(&a1).reversed_axes()
 }
 
 pub fn kronecker<T>(
-    a: &nd::ArrayView2<Complex<T>>,
-    b: &nd::ArrayView2<Complex<T>>,
+    a: &nd::Array2<Complex<T>>,
+    b: &nd::Array2<Complex<T>>,
 ) -> nd::Array2<Complex<T>>
 where
     T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
@@ -92,8 +89,8 @@ where
 }
 
 pub fn rotate<T>(
-    rho2: &nd::ArrayView2<Complex<T>>,
-    unitary: &nd::ArrayView2<Complex<T>>,
+    rho2: &nd::Array2<Complex<T>>,
+    unitary: &nd::Array2<Complex<T>>,
 ) -> nd::Array2<Complex<T>>
 where
     T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
@@ -142,8 +139,7 @@ where
 
     for row in symmetries {
         for symmetry in row {
-            let output_view = output.view();
-            output = rotate(&output_view, &symmetry.view()) + output_view;
+            output = rotate(&output, symmetry) + output;
         }
     }
     output
@@ -156,7 +152,7 @@ where
 //   ██████     ██         ███████            ██      ██     ██████     ██████     ███████
 
 pub fn expand_d_fs<T>(
-    value: &nd::ArrayView2<Complex<T>>,
+    value: &nd::Array2<Complex<T>>,
     depth: usize,
     quantity: usize,
     idx: usize,
@@ -170,10 +166,8 @@ where
     let depth_2 = depth.pow((quantity - idx - 1) as u32);
     let identity_2 = nd::Array::eye(depth_2);
 
-    let kronecker_1 = kronecker(&identity_1.view(), &value.view());
-    let kronecker_2 = kronecker(&kronecker_1.view(), &identity_2.view());
-
-    kronecker_2
+    let kronecker_1 = kronecker(&identity_1, value);
+    kronecker(&kronecker_1, &identity_2)
 }
 
 pub fn random_unitary_d_fs<T>(
@@ -185,8 +179,7 @@ where
     T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
 {
     let value = _random_unitary_d_fs::<T>(depth);
-    let mtx = expand_d_fs(&value.view(), depth, quantity, idx);
-    mtx
+    expand_d_fs(&value, depth, quantity, idx)
 }
 
 pub fn _random_unitary_d_fs<T>(depth: usize) -> nd::Array2<Complex<T>>
@@ -216,7 +209,7 @@ pub fn random_d_fs<T>(depth: usize, quantity: usize) -> nd::Array2<Complex<T>>
 where
     T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
 {
-    let vector = normalize(&get_random_haar_1d(depth).view());
+    let vector = normalize(&get_random_haar_1d(depth));
     let mut vector_2d;
 
     vector_2d = vector.into_shape((depth, 1)).unwrap();
@@ -225,22 +218,22 @@ where
 
     for _ in 1..quantity {
         let rand_vector = get_random_haar_1d(depth);
-        let normalized_rand_vector = normalize(&rand_vector.view());
+        let normalized_rand_vector = normalize(&rand_vector);
 
         let normalized_rand_vector_2d =
             normalized_rand_vector.into_shape((1, depth)).unwrap();
 
-        let matrix = vector_2d.dot(&normalized_rand_vector_2d.view());
+        let matrix = vector_2d.dot(&normalized_rand_vector_2d);
         vector_width *= depth;
 
         vector_2d = matrix.into_shape((vector_width, 1)).unwrap();
     }
-    return project(&vector_2d.into_shape((vector_width,)).unwrap().view());
+    project(&vector_2d.into_shape((vector_width,)).unwrap())
 }
 
 pub fn optimize_d_fs<T>(
-    new_state: &nd::ArrayView2<Complex<T>>,
-    visibility_state: &nd::ArrayView2<Complex<T>>,
+    new_state: &nd::Array2<Complex<T>>,
+    visibility_state: &nd::Array2<Complex<T>>,
     depth: usize,
     quantity: usize,
     updates_count: usize,
@@ -250,26 +243,26 @@ where
 {
     let mut product_2_3 = product(new_state, visibility_state);
     let mut unitary = random_unitary_d_fs(depth, quantity, 0);
-    let mut rotated_2 = rotate(new_state, &unitary.view());
+    let mut rotated_2 = rotate(new_state, &unitary);
 
     for idx in 0..updates_count {
         let idx_mod = idx % quantity;
         unitary = random_unitary_d_fs(depth, quantity, idx_mod);
 
-        rotated_2 = rotate(new_state, &unitary.view());
+        rotated_2 = rotate(new_state, &unitary);
 
-        let mut product_rot2_3 = product(&rotated_2.view(), visibility_state);
+        let mut product_rot2_3 = product(&rotated_2, visibility_state);
 
         if product_2_3 > product_rot2_3 {
             unitary = unitary.mapv(|x| x.conj()).t().to_owned();
-            rotated_2 = rotate(new_state, &unitary.view());
+            rotated_2 = rotate(new_state, &unitary);
         }
 
         while product_2_3 > product_rot2_3 {
             product_2_3 = product_rot2_3;
-            rotated_2 = rotate(&rotated_2.view(), &unitary.view());
+            rotated_2 = rotate(&rotated_2, &unitary);
 
-            product_rot2_3 = product(&rotated_2.view(), visibility_state);
+            product_rot2_3 = product(&rotated_2, visibility_state);
         }
     }
 
@@ -329,7 +322,7 @@ where
     T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
 {
     pub fn new(
-        initial: &nd::ArrayView2<Complex<T>>,
+        initial: &nd::Array2<Complex<T>>,
         depth: usize,
         quantity: usize,
         mode: AlgoMode,
@@ -339,20 +332,17 @@ where
         T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
     {
         let visibility_matrix =
-            RustBackend::create_visibility_matrix(&initial.view(), visibility);
+            RustBackend::create_visibility_matrix(initial, visibility);
         let intermediate_matrix =
-            RustBackend::create_intermediate_state(&visibility_matrix.view());
+            RustBackend::create_intermediate_state(&visibility_matrix);
 
         let visibility_reduced =
             visibility_matrix.view().sub(&intermediate_matrix.view());
 
-        let visibility_view = visibility_matrix.view();
-        let intermediate_view = intermediate_matrix.view();
-        let visibility_reduced_view = visibility_reduced.view();
-
-        let aa4 = T::from(2).unwrap() * product(&visibility_view, &intermediate_view);
-        let aa6 = product(&intermediate_view, &intermediate_view);
-        let dd1 = product(&intermediate_view, &visibility_reduced_view);
+        let aa4 =
+            T::from(2).unwrap() * product(&visibility_matrix, &intermediate_matrix);
+        let aa6 = product(&intermediate_matrix, &intermediate_matrix);
+        let dd1 = product(&intermediate_matrix, &visibility_reduced);
 
         RustBackend {
             initial: initial.to_owned(),
@@ -378,7 +368,7 @@ where
     }
 
     fn create_visibility_matrix(
-        initial: &nd::ArrayView2<Complex<T>>,
+        initial: &nd::Array2<Complex<T>>,
         visibility: T,
     ) -> nd::Array2<Complex<T>> {
         let length_of_first_axis = initial.dim().0;
@@ -397,7 +387,7 @@ where
     }
 
     fn create_intermediate_state(
-        visibility_matrix: &nd::ArrayView2<Complex<T>>,
+        visibility_matrix: &nd::Array2<Complex<T>>,
     ) -> nd::Array2<Complex<T>> {
         let length_of_first_axis = visibility_matrix.dim().0;
         let mut intermediate_state = nd::Array2::<Complex<T>>::zeros((
@@ -441,9 +431,7 @@ where
                 }
             };
 
-            if product(&alternative_state.view(), &self.visibility_reduced.view())
-                > self.dd1
-            {
+            if product(&alternative_state, &self.visibility_reduced) > self.dd1 {
                 self.update_state(
                     &alternative_state,
                     iterations,
@@ -469,8 +457,8 @@ where
 
         let optimized_state = match self.mode {
             AlgoMode::FSnQd => optimize_d_fs(
-                &alternative_state.view(),
-                &self.visibility_reduced.view(),
+                alternative_state,
+                &self.visibility_reduced,
                 depth,
                 quantity,
                 epochs,
@@ -488,14 +476,12 @@ where
             self.intermediate = apply_symmetries(&self.intermediate, symmetries);
         }
         if let Some(ref projection) = self.projection {
-            self.intermediate = rotate(&self.intermediate.view(), &projection.view());
+            self.intermediate = rotate(&self.intermediate, projection);
         }
 
-        let optimized_view = optimized_state.view();
-
-        let aa3 = product(&optimized_view, &optimized_view);
-        let aa2 = literal_two * product(&self.visibility.view(), &optimized_view);
-        let aa5 = literal_two * product(&self.intermediate.view(), &optimized_view);
+        let aa3 = product(&optimized_state, &optimized_state);
+        let aa2 = literal_two * product(&self.visibility, &optimized_state);
+        let aa5 = literal_two * product(&self.intermediate, &optimized_state);
 
         let bb2 = -self.aa4 + aa2 + aa5 - (literal_two * aa3);
         let bb3 = self.aa6 - aa5 + aa3;
@@ -508,19 +494,14 @@ where
 
             self.visibility_reduced = &self.visibility - &self.intermediate;
 
-            let visibility_view = self.visibility.view();
-            let intermediate_view = self.intermediate.view();
-
-            self.aa4 = literal_two * product(&visibility_view, &intermediate_view);
-            self.aa6 = product(&intermediate_view, &intermediate_view);
+            self.aa4 = literal_two * product(&self.visibility, &self.intermediate);
+            self.aa6 = product(&self.intermediate, &self.intermediate);
             self.dd1 = self.aa4 / literal_two - self.aa6;
-
-            let visibility_reduced_view = self.visibility_reduced.view();
 
             self.corrections.push((
                 (epoch_index * iterations as usize + iteration_index as usize + 1),
                 self.corrections.len() + 1,
-                product(&visibility_reduced_view, &visibility_reduced_view),
+                product(&self.visibility_reduced, &self.visibility_reduced),
             ));
         }
     }

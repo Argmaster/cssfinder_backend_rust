@@ -42,6 +42,8 @@ fn cssfinder_backend_rust(py: Python, m: &PyModule) -> PyResult<()> {
                 PyModule::import(py, "cssfinder_backend_rust").unwrap();
 
             let backend_class_f64 = cssfinder_backend_rust_module
+                .getattr("complex128")
+                .unwrap()
                 .getattr("NaiveRustBackendF64")
                 .unwrap();
 
@@ -55,6 +57,8 @@ fn cssfinder_backend_rust(py: Python, m: &PyModule) -> PyResult<()> {
                 .unwrap();
 
             let backend_class_f32 = cssfinder_backend_rust_module
+                .getattr("complex64")
+                .unwrap()
                 .getattr("NaiveRustBackendF32")
                 .unwrap();
 
@@ -118,7 +122,10 @@ mod complex128 {
     ) -> PyResult<f64> {
         let array_1 = a.as_array();
         let array_2 = b.as_array();
-        Ok(super::naive::product(&array_1, &array_2))
+        Ok(super::naive::product(
+            &array_1.to_owned(),
+            &array_2.to_owned(),
+        ))
     }
 
     #[pyfunction]
@@ -127,7 +134,7 @@ mod complex128 {
         a: np::PyReadonlyArray1<Complex<f64>>,
     ) -> &'py np::PyArray1<Complex<f64>> {
         let array_1 = a.as_array();
-        let array_2 = super::naive::normalize(&array_1);
+        let array_2 = super::naive::normalize(&array_1.to_owned());
         let array_out = np::PyArray::from_owned_array(py, array_2);
         array_out
     }
@@ -138,7 +145,7 @@ mod complex128 {
         a: np::PyReadonlyArray1<Complex<f64>>,
     ) -> &'py np::PyArray2<Complex<f64>> {
         let array_1 = a.as_array();
-        let array_2 = super::naive::project(&array_1);
+        let array_2 = super::naive::project(&array_1.to_owned());
         let array_out = np::PyArray::from_owned_array(py, array_2);
         array_out
     }
@@ -151,7 +158,7 @@ mod complex128 {
     ) -> &'py np::PyArray2<Complex<f64>> {
         let array_1 = a.as_array();
         let array_2 = b.as_array();
-        let array_3 = super::naive::kronecker(&array_1, &array_2);
+        let array_3 = super::naive::kronecker(&array_1.to_owned(), &array_2.to_owned());
         let array_out = np::PyArray::from_owned_array(py, array_3);
         array_out
     }
@@ -162,7 +169,8 @@ mod complex128 {
         a: np::PyReadonlyArray2<Complex<f64>>,
         b: np::PyReadonlyArray2<Complex<f64>>,
     ) -> &'py np::PyArray2<Complex<f64>> {
-        let array_3 = super::naive::rotate(&a.as_array(), &b.as_array());
+        let array_3 =
+            super::naive::rotate(&a.as_array().to_owned(), &b.as_array().to_owned());
         let array_out = np::PyArray::from_owned_array(py, array_3);
         array_out
     }
@@ -182,8 +190,12 @@ mod complex128 {
         quantity: usize,
         idx: usize,
     ) -> &'py np::PyArray2<Complex<f64>> {
-        let array_3 =
-            super::naive::expand_d_fs(&value.as_array(), depth, quantity, idx);
+        let array_3 = super::naive::expand_d_fs(
+            &value.as_array().to_owned(),
+            depth,
+            quantity,
+            idx,
+        );
         let array_out = np::PyArray::from_owned_array(py, array_3);
         array_out
     }
@@ -221,8 +233,8 @@ mod complex128 {
         updates_count: usize,
     ) -> &'py np::PyArray2<Complex<f64>> {
         let array_out = super::naive::optimize_d_fs(
-            &new_state.as_array(),
-            &visibility_state.as_array(),
+            &new_state.as_array().to_owned(),
+            &visibility_state.as_array().to_owned(),
             depth,
             quantity,
             updates_count,
@@ -270,7 +282,7 @@ mod complex128 {
             assert!(is_debug.unwrap_or(false) || !is_debug.unwrap_or(false));
 
             let backend = crate::naive::RustBackend::<f64>::new(
-                &state_array,
+                &state_array.to_owned(),
                 depth,
                 quantity,
                 mode,
@@ -355,7 +367,7 @@ mod complex64 {
             assert!(is_debug.unwrap_or(false) || !is_debug.unwrap_or(false));
 
             let backend = crate::naive::RustBackend::<f32>::new(
-                &state_array.view(),
+                &state_array,
                 depth,
                 quantity,
                 mode,
