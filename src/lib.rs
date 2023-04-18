@@ -26,7 +26,9 @@ mod shared;
 /// A Python module implemented in Rust.
 #[pymodule]
 fn cssfinder_backend_rust(py: Python, m: &PyModule) -> PyResult<()> {
+    register_complex64(py, m)?;
     register_complex128(py, m)?;
+
     m.add("__version__", "0.1.0")?;
 
     #[pyfunction]
@@ -39,8 +41,8 @@ fn cssfinder_backend_rust(py: Python, m: &PyModule) -> PyResult<()> {
             let cssfinder_backend_rust_module =
                 PyModule::import(py, "cssfinder_backend_rust").unwrap();
 
-            let backend_class = cssfinder_backend_rust_module
-                .getattr("NaiveRustBackend")
+            let backend_class_f64 = cssfinder_backend_rust_module
+                .getattr("NaiveRustBackendF64")
                 .unwrap();
 
             let backends_dict = PyDict::new(py);
@@ -48,7 +50,18 @@ fn cssfinder_backend_rust(py: Python, m: &PyModule) -> PyResult<()> {
             backends_dict
                 .set_item(
                     ("rust_naive", precision_enum.getattr("DOUBLE").unwrap()),
-                    backend_class,
+                    backend_class_f64,
+                )
+                .unwrap();
+
+            let backend_class_f32 = cssfinder_backend_rust_module
+                .getattr("NaiveRustBackendF32")
+                .unwrap();
+
+            backends_dict
+                .set_item(
+                    ("rust_naive", precision_enum.getattr("SINGLE").unwrap()),
+                    backend_class_f32,
                 )
                 .unwrap();
 
@@ -63,19 +76,29 @@ fn cssfinder_backend_rust(py: Python, m: &PyModule) -> PyResult<()> {
 fn register_complex128(py: Python, parent: &PyModule) -> PyResult<()> {
     let module = PyModule::new(py, "complex128")?;
 
-    parent.add_function(wrap_pyfunction!(complex128::product, parent)?)?;
-    parent.add_function(wrap_pyfunction!(complex128::normalize, parent)?)?;
-    parent.add_function(wrap_pyfunction!(complex128::project, parent)?)?;
-    parent.add_function(wrap_pyfunction!(complex128::kronecker, parent)?)?;
-    parent.add_function(wrap_pyfunction!(complex128::rotate, parent)?)?;
-    parent.add_function(wrap_pyfunction!(complex128::get_random_haar_1d, parent)?)?;
-    parent.add_function(wrap_pyfunction!(complex128::expand_d_fs, parent)?)?;
-    parent.add_function(wrap_pyfunction!(complex128::random_unitary_d_fs, parent)?)?;
-    parent.add_function(wrap_pyfunction!(complex128::random_d_fs, parent)?)?;
-    parent.add_function(wrap_pyfunction!(complex128::optimize_d_fs, parent)?)?;
-    parent.add_function(wrap_pyfunction!(complex128::noop, parent)?)?;
+    module.add_function(wrap_pyfunction!(complex128::product, parent)?)?;
+    module.add_function(wrap_pyfunction!(complex128::normalize, parent)?)?;
+    module.add_function(wrap_pyfunction!(complex128::project, parent)?)?;
+    module.add_function(wrap_pyfunction!(complex128::kronecker, parent)?)?;
+    module.add_function(wrap_pyfunction!(complex128::rotate, parent)?)?;
+    module.add_function(wrap_pyfunction!(complex128::get_random_haar_1d, parent)?)?;
+    module.add_function(wrap_pyfunction!(complex128::expand_d_fs, parent)?)?;
+    module.add_function(wrap_pyfunction!(complex128::random_unitary_d_fs, parent)?)?;
+    module.add_function(wrap_pyfunction!(complex128::random_d_fs, parent)?)?;
+    module.add_function(wrap_pyfunction!(complex128::optimize_d_fs, parent)?)?;
+    module.add_function(wrap_pyfunction!(complex128::noop, parent)?)?;
 
-    parent.add_class::<complex128::NaiveRustBackend>()?;
+    module.add_class::<complex128::NaiveRustBackendF64>()?;
+
+    parent.add_submodule(module)?;
+
+    Ok(())
+}
+
+fn register_complex64(py: Python, parent: &PyModule) -> PyResult<()> {
+    let module = PyModule::new(py, "complex64")?;
+
+    module.add_class::<complex64::NaiveRustBackendF32>()?;
 
     parent.add_submodule(module)?;
 
@@ -228,12 +251,12 @@ mod complex128 {
     }
 
     #[pyclass]
-    pub struct NaiveRustBackend {
+    pub struct NaiveRustBackendF64 {
         backend: super::naive::RustBackend<f64>,
     }
 
     #[pymethods]
-    impl NaiveRustBackend {
+    impl NaiveRustBackendF64 {
         #[new]
         fn new(
             initial: np::PyReadonlyArray2<Complex<f64>>,
@@ -254,7 +277,7 @@ mod complex128 {
                 visibility,
             );
 
-            NaiveRustBackend { backend }
+            NaiveRustBackendF64 { backend }
         }
 
         fn set_symmetries(
@@ -292,6 +315,91 @@ mod complex128 {
         }
 
         fn get_corrections(&self) -> PyResult<Vec<(usize, usize, f64)>> {
+            Ok(self.backend.get_corrections().to_owned())
+        }
+
+        fn get_corrections_count(&self) -> PyResult<usize> {
+            Ok(self.backend.get_corrections().len())
+        }
+
+        fn run_epoch(&mut self, iterations: i64, epoch_index: usize) {
+            self.backend.run_epoch(iterations, epoch_index)
+        }
+    }
+}
+
+mod complex64 {
+    use num::Complex;
+    use numpy as np;
+    use pyo3::prelude::*;
+
+    #[pyclass]
+    pub struct NaiveRustBackendF32 {
+        backend: super::naive::RustBackend<f32>,
+    }
+
+    #[pymethods]
+    impl NaiveRustBackendF32 {
+        #[new]
+        fn new(
+            initial: np::PyReadonlyArray2<Complex<f64>>,
+            depth: usize,
+            quantity: usize,
+            mode: super::shared::AlgoMode,
+            visibility: f32,
+            is_debug: Option<bool>,
+        ) -> Self {
+            let state_array = initial
+                .as_array()
+                .mapv(|x| Complex::<f32>::new(x.re as f32, x.im as f32));
+            assert!(is_debug.unwrap_or(false) || !is_debug.unwrap_or(false));
+
+            let backend = crate::naive::RustBackend::<f32>::new(
+                &state_array.view(),
+                depth,
+                quantity,
+                mode,
+                visibility,
+            );
+
+            NaiveRustBackendF32 { backend }
+        }
+
+        fn set_symmetries(
+            &mut self,
+            symmetries: Vec<Vec<np::PyReadonlyArray2<Complex<f32>>>>,
+        ) {
+            use ndarray as nd;
+
+            let symmetries_local = symmetries
+                .into_iter()
+                .map(|inner_vec| {
+                    inner_vec
+                        .into_iter()
+                        .map(|pyarray| {
+                            let array_ref = pyarray.as_array();
+                            let array: nd::Array2<Complex<f32>> = array_ref.to_owned();
+                            array
+                        })
+                        .collect()
+                })
+                .collect();
+            self.backend.set_symmetries(symmetries_local);
+        }
+
+        fn set_projection(&mut self, projection: np::PyReadonlyArray2<Complex<f32>>) {
+            println!("{:?}", projection);
+        }
+
+        fn get_state<'py>(
+            &self,
+            py: Python<'py>,
+        ) -> PyResult<&'py np::PyArray2<Complex<f32>>> {
+            let array_out = self.backend.get_state();
+            Ok(np::PyArray::from_owned_array(py, array_out.to_owned()))
+        }
+
+        fn get_corrections(&self) -> PyResult<Vec<(usize, usize, f32)>> {
             Ok(self.backend.get_corrections().to_owned())
         }
 

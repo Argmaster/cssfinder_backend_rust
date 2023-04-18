@@ -1,7 +1,7 @@
 from typing import ClassVar
 
 import cssfinder_backend_numpy.numpy._complex128 as numpy_c128
-import cssfinder_backend_rust as rust_c128
+import cssfinder_backend_rust as rust_backend
 import numpy as np
 from cssfinder.algorithm.backend.base import BackendBase
 from cssfinder.cssfproject import AlgoMode
@@ -126,12 +126,9 @@ class ValidateConformance:
             ]
         ).flatten()
 
-        right = max(reference.max(), this.max())
-        left = min(reference.min(), this.min())
-
         plt.hist(reference, 100, alpha=0.5, range=(-2.0, 6.0), color="blue")
         plt.hist(this, 100, alpha=0.5, range=(-2.0, 6.0), color="red")
-        plt.show()
+        # ; plt.show()
 
         assert reference.shape == this.shape
 
@@ -211,19 +208,19 @@ class ValidateConformance:
 
 
 class TestComplex128(ValidateConformance):
-    this = rust_c128
+    this = rust_backend.complex128
     reference = numpy_c128
     dtype = np.complex128
 
 
 class TestBackendClass:
     def get_backend_instance(self) -> BackendBase:
-        return rust_c128.NaiveRustBackend(
+        return rust_backend.complex128.NaiveRustBackendF64(
             np.identity(32).astype(np.complex128),
             2,
             5,
             AlgoMode.FSnQd,
-            0.4,
+            1.0,
         )
 
     def test_backend_set_symmetries(self) -> None:
