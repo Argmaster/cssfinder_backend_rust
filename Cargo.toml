@@ -2,7 +2,7 @@
 name = "cssfinder-backend-rust"
 version = "0.1.0"
 edition = "2021"
-authors = ["Krzysztof Wiśniewski <argmaster.world@gmail.com>"]
+authors = ["Krzysztof Wisniewski <argmaster.world@gmail.com>"]
 description = "Implementation of CSSFinder backend using Rust."
 repository = "https://github.com/argmaster/cssfinder_backend_rust"
 readme = "README.md"
@@ -14,6 +14,14 @@ name = "cssfinder_backend_rust"
 crate-type = ["cdylib"]
 
 [dependencies]
+ndarray = "0.15.6"
+ndarray-rand = "0.14"
+num = "0.4.0"
+num-traits = "0.2.15"
+numpy = "0.18.0"
+rand = "0.8"
+statrs = "0.16.0"
+rand_distr = "0.4.3"
 
 [dependencies.pyo3]
 version = "0.18.1"
