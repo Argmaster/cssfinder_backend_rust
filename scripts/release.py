@@ -33,7 +33,6 @@ SCRIPTS_DIR = Path(__file__).parent
 ROOT_DIR = SCRIPTS_DIR.parent
 
 PYPROJECT_PATH = ROOT_DIR / "pyproject.toml"
-INIT_PATH = ROOT_DIR / "cssfinder_backend_numpy" / "__init__.py"
 README_PATH = ROOT_DIR / "README.md"
 
 
@@ -73,9 +72,14 @@ def create(version: str) -> None:
         f'version = "{version}"\n',
     )
     replace_version(
-        INIT_PATH,
-        r"__version__\s*=\s*\"(.*?)\"\n",
-        f'__version__ = "{version}"\n',
+        ROOT_DIR / "Cargo.toml",
+        r"version\s*=\s*\"(.*?)\"\n",
+        f'version = "{version}"\n',
+    )
+    replace_version(
+        ROOT_DIR / "src" / "lib.rs",
+        r"m.add(\"__version__\", \"0.1.0\")\?;",
+        f'm.add(\"__version__\", \"{version}\")?;',
     )
     replace_version(
         README_PATH,
