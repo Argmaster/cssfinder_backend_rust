@@ -22,6 +22,7 @@ figsize
 figwidth
 forceobj
 fsnqd
+getattr
 getpid
 iloc
 inplace
@@ -49,12 +50,14 @@ numba
 numpy
 offsetted
 pango
+printoptions
 psutil
 pyarray
 pyclass
 pydantic
 pyfunction
 pyjinja
+pymethods
 pymodule
 pypa
 PYPI
@@ -75,6 +78,8 @@ swapaxes
 tensordot
 tomlkit
 tracebacks
+tril
+triu
 weasyprint
 Wieśniak
 Wiśniewski
