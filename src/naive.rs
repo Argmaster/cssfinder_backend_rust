@@ -25,7 +25,7 @@ use std::ops::Sub;
 
 use ndarray as nd;
 use num::Complex;
-use num_traits::Float;
+use num_traits::{Float, Zero};
 use rand::Rng;
 
 use crate::shared::AlgoMode;
@@ -142,6 +142,13 @@ where
             output = rotate(&output, symmetry) + output;
         }
     }
+
+    let mut trace = Complex::<T>::zero();
+    for i in 0..output.dim().0 {
+        trace = trace + output[[i, i]];
+    }
+
+    output = output.map(|x| *x / trace);
     output
 }
 
