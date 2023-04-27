@@ -30,252 +30,6 @@ use rand::Rng;
 
 use crate::shared::AlgoMode;
 
-pub fn product<T>(lhs: &nd::Array2<Complex<T>>, rhs: &nd::Array2<Complex<T>>) -> T
-where
-    T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
-{
-    let square_matrix_size = lhs.dim().0;
-    let mut result = T::zero();
-
-    for i in 0..square_matrix_size {
-        for k in 0..square_matrix_size {
-            result = result + (lhs[[i, k]] * rhs[[k, i]]).re;
-        }
-    }
-    result
-}
-
-pub fn normalize<T>(vec: &nd::Array1<Complex<T>>) -> nd::Array1<Complex<T>>
-where
-    T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
-{
-    let divisor = vec.dot(&vec.mapv(|x| x.conj())).re.sqrt();
-    nd::Zip::from(vec).map_collect(|x| x / divisor)
-}
-
-pub fn project<T>(a: &nd::Array1<Complex<T>>) -> nd::Array2<Complex<T>>
-where
-    T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
-{
-    let length = a.len();
-    let b = a.mapv(|x| x.conj()).into_shape((length, 1)).unwrap();
-    // .zip(mtx1_conj.outer_iter()).map_collect(|(x, y)| x * y)
-    let a1 = a.clone().into_shape((1, length)).unwrap();
-
-    b.dot(&a1).reversed_axes()
-}
-
-pub fn kronecker<T>(
-    a: &nd::Array2<Complex<T>>,
-    b: &nd::Array2<Complex<T>>,
-) -> nd::Array2<Complex<T>>
-where
-    T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
-{
-    let ddd1 = a.dim().0;
-    let ddd2 = b.dim().0;
-
-    let output_shape = (ddd1 * ddd2, ddd1 * ddd2);
-
-    let mut out_mtx = nd::Array::zeros((ddd1, ddd2, ddd1, ddd2));
-
-    for ((i1, j1), x) in a.indexed_iter() {
-        for ((i2, j2), y) in b.indexed_iter() {
-            out_mtx[[i1, i2, j1, j2]] = x * y;
-        }
-    }
-
-    out_mtx.into_shape(output_shape).unwrap()
-}
-
-pub fn rotate<T>(
-    rho2: &nd::Array2<Complex<T>>,
-    unitary: &nd::Array2<Complex<T>>,
-) -> nd::Array2<Complex<T>>
-where
-    T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
-{
-    let unitary_conj_transpose = unitary.mapv(|x| x.conj()).reversed_axes();
-    let rho2a = rho2.dot(&unitary_conj_transpose);
-    unitary.dot(&rho2a)
-}
-
-pub fn get_random_haar_1d<T>(depth: usize) -> nd::Array1<Complex<T>>
-where
-    T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
-{
-    let normal =
-        rand_distr::Uniform::<T>::new(T::from(0.0).unwrap(), T::from(1.0).unwrap());
-
-    let mut rng_real = rand::thread_rng();
-
-    let real = (&mut rng_real)
-        .sample_iter(&normal)
-        .take(depth)
-        .collect::<Vec<T>>();
-
-    let imaginary = (&mut rng_real)
-        .sample_iter(&normal)
-        .take(depth)
-        .collect::<Vec<T>>();
-
-    nd::Zip::from(&real).and(&imaginary).map_collect(|r, i| {
-        let in_exp = T::from(2.0f64).unwrap() * T::from(PI).unwrap() * *r;
-        let c_r = Complex::<T>::new(T::zero(), in_exp);
-        let c_i = (-T::ln(*i)).sqrt();
-
-        Complex::<T>::exp(c_r) * c_i
-    })
-}
-
-fn apply_symmetries<T>(
-    state: &nd::Array2<Complex<T>>,
-    symmetries: &Vec<Vec<nd::Array2<Complex<T>>>>,
-) -> nd::Array2<Complex<T>>
-where
-    T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
-{
-    let mut output = state.to_owned();
-
-    for row in symmetries {
-        for symmetry in row {
-            output = rotate(&output, symmetry) + output;
-        }
-    }
-
-    let mut trace = Complex::<T>::zero();
-    for i in 0..output.dim().0 {
-        trace = trace + output[[i, i]];
-    }
-
-    output = output.map(|x| *x / trace);
-    output
-}
-
-//   ██████     ███████    ███████            ███    ███     ██████     ██████     ███████
-//   ██   ██    ██         ██                 ████  ████    ██    ██    ██   ██    ██
-//   ██   ██    █████      ███████            ██ ████ ██    ██    ██    ██   ██    █████
-//   ██   ██    ██              ██            ██  ██  ██    ██    ██    ██   ██    ██
-//   ██████     ██         ███████            ██      ██     ██████     ██████     ███████
-
-pub fn expand_d_fs<T>(
-    value: &nd::Array2<Complex<T>>,
-    depth: usize,
-    quantity: usize,
-    idx: usize,
-) -> nd::Array2<Complex<T>>
-where
-    T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
-{
-    let depth_1 = depth.pow(idx as u32);
-    let identity_1 = nd::Array::eye(depth_1);
-
-    let depth_2 = depth.pow((quantity - idx - 1) as u32);
-    let identity_2 = nd::Array::eye(depth_2);
-
-    let kronecker_1 = kronecker(&identity_1, value);
-    kronecker(&kronecker_1, &identity_2)
-}
-
-pub fn random_unitary_d_fs<T>(
-    depth: usize,
-    quantity: usize,
-    idx: usize,
-) -> nd::Array2<Complex<T>>
-where
-    T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
-{
-    let value = _random_unitary_d_fs::<T>(depth);
-    expand_d_fs(&value, depth, quantity, idx)
-}
-
-pub fn _random_unitary_d_fs<T>(depth: usize) -> nd::Array2<Complex<T>>
-where
-    T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
-{
-    let random_mtx = get_random_haar_1d(depth).into_shape((depth, 1)).unwrap();
-    let identity_mtx = nd::Array2::<Complex<T>>::eye(depth);
-
-    let value = _value::<T>();
-    let rand_mul = random_mtx.mapv(|x| value * x);
-
-    rand_mul + identity_mtx
-}
-
-pub fn _value<T>() -> Complex<T>
-where
-    T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
-{
-    let real = T::from(0.01 * PI).unwrap();
-    let imaginary = T::from(0.01 * PI).unwrap();
-
-    Complex::new(real.cos() - T::one(), imaginary.sin())
-}
-
-pub fn random_d_fs<T>(depth: usize, quantity: usize) -> nd::Array2<Complex<T>>
-where
-    T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
-{
-    let vector = normalize(&get_random_haar_1d(depth));
-    let mut vector_2d;
-
-    vector_2d = vector.into_shape((depth, 1)).unwrap();
-
-    let mut vector_width = depth;
-
-    for _ in 1..quantity {
-        let rand_vector = get_random_haar_1d(depth);
-        let normalized_rand_vector = normalize(&rand_vector);
-
-        let normalized_rand_vector_2d =
-            normalized_rand_vector.into_shape((1, depth)).unwrap();
-
-        let matrix = vector_2d.dot(&normalized_rand_vector_2d);
-        vector_width *= depth;
-
-        vector_2d = matrix.into_shape((vector_width, 1)).unwrap();
-    }
-    project(&vector_2d.into_shape((vector_width,)).unwrap())
-}
-
-pub fn optimize_d_fs<T>(
-    new_state: &nd::Array2<Complex<T>>,
-    visibility_state: &nd::Array2<Complex<T>>,
-    depth: usize,
-    quantity: usize,
-    updates_count: usize,
-) -> nd::Array2<Complex<T>>
-where
-    T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
-{
-    let mut product_2_3 = product(new_state, visibility_state);
-    let mut unitary = random_unitary_d_fs(depth, quantity, 0);
-    let mut rotated_2 = rotate(new_state, &unitary);
-
-    for idx in 0..updates_count {
-        let idx_mod = idx % quantity;
-        unitary = random_unitary_d_fs(depth, quantity, idx_mod);
-
-        rotated_2 = rotate(new_state, &unitary);
-
-        let mut product_rot2_3 = product(&rotated_2, visibility_state);
-
-        if product_2_3 > product_rot2_3 {
-            unitary = unitary.mapv(|x| x.conj()).t().to_owned();
-            rotated_2 = rotate(new_state, &unitary);
-        }
-
-        while product_2_3 > product_rot2_3 {
-            product_2_3 = product_rot2_3;
-            rotated_2 = rotate(&rotated_2, &unitary);
-
-            product_rot2_3 = product(&rotated_2, visibility_state);
-        }
-    }
-
-    rotated_2
-}
-
 /*
  ████   ███   ████ █   █ █████ █    █ ████      ████ █      ███   ████  ████
  █   █ █   █ █     █  █  █     ██   █ █   █    █     █     █   █ █     █
@@ -346,10 +100,10 @@ where
         let visibility_reduced =
             visibility_matrix.view().sub(&intermediate_matrix.view());
 
-        let aa4 =
-            T::from(2).unwrap() * product(&visibility_matrix, &intermediate_matrix);
-        let aa6 = product(&intermediate_matrix, &intermediate_matrix);
-        let dd1 = product(&intermediate_matrix, &visibility_reduced);
+        let aa4 = T::from(2).unwrap()
+            * RustBackend::product(&visibility_matrix, &intermediate_matrix);
+        let aa6 = RustBackend::product(&intermediate_matrix, &intermediate_matrix);
+        let dd1 = RustBackend::product(&intermediate_matrix, &visibility_reduced);
 
         RustBackend {
             initial: initial.to_owned(),
@@ -428,7 +182,7 @@ where
 
         for iteration_index in 0..iterations {
             let alternative_state = match self.mode {
-                AlgoMode::FSnQd => random_d_fs(depth, quantity),
+                AlgoMode::FSnQd => self.random_d_fs(depth, quantity),
                 AlgoMode::SBiPa => panic!("Mode 'SBiPa' is currently not supported."),
                 AlgoMode::G3PaE3qD => {
                     panic!("Mode 'G3PaE3qD' is currently not supported.")
@@ -438,7 +192,9 @@ where
                 }
             };
 
-            if product(&alternative_state, &self.visibility_reduced) > self.dd1 {
+            if RustBackend::product(&alternative_state, &self.visibility_reduced)
+                > self.dd1
+            {
                 self.update_state(
                     &alternative_state,
                     iterations,
@@ -463,7 +219,7 @@ where
         let literal_two = T::from(2).unwrap();
 
         let optimized_state = match self.mode {
-            AlgoMode::FSnQd => optimize_d_fs(
+            AlgoMode::FSnQd => self.optimize_d_fs(
                 alternative_state,
                 &self.visibility_reduced,
                 depth,
@@ -480,15 +236,17 @@ where
         };
 
         if let Some(ref symmetries) = self.symmetries {
-            self.intermediate = apply_symmetries(&self.intermediate, symmetries);
+            self.intermediate = self.apply_symmetries(&self.intermediate, symmetries);
         }
         if let Some(ref projection) = self.projection {
-            self.intermediate = rotate(&self.intermediate, projection);
+            self.intermediate = self.rotate(&self.intermediate, projection);
         }
 
-        let aa3 = product(&optimized_state, &optimized_state);
-        let aa2 = literal_two * product(&self.visibility, &optimized_state);
-        let aa5 = literal_two * product(&self.intermediate, &optimized_state);
+        let aa3 = RustBackend::product(&optimized_state, &optimized_state);
+        let aa2 =
+            literal_two * RustBackend::product(&self.visibility, &optimized_state);
+        let aa5 =
+            literal_two * RustBackend::product(&self.intermediate, &optimized_state);
 
         let bb2 = -self.aa4 + aa2 + aa5 - (literal_two * aa3);
         let bb3 = self.aa6 - aa5 + aa3;
@@ -501,15 +259,274 @@ where
 
             self.visibility_reduced = &self.visibility - &self.intermediate;
 
-            self.aa4 = literal_two * product(&self.visibility, &self.intermediate);
-            self.aa6 = product(&self.intermediate, &self.intermediate);
+            self.aa4 = literal_two
+                * RustBackend::product(&self.visibility, &self.intermediate);
+            self.aa6 = RustBackend::product(&self.intermediate, &self.intermediate);
             self.dd1 = self.aa4 / literal_two - self.aa6;
 
             self.corrections.push((
                 (epoch_index * iterations as usize + iteration_index as usize + 1),
                 self.corrections.len() + 1,
-                product(&self.visibility_reduced, &self.visibility_reduced),
+                RustBackend::product(
+                    &self.visibility_reduced,
+                    &self.visibility_reduced,
+                ),
             ));
         }
+    }
+
+    pub fn product(lhs: &nd::Array2<Complex<T>>, rhs: &nd::Array2<Complex<T>>) -> T
+    where
+        T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
+    {
+        let square_matrix_size = lhs.dim().0;
+        let mut result = T::zero();
+
+        for i in 0..square_matrix_size {
+            for k in 0..square_matrix_size {
+                result = result + (lhs[[i, k]] * rhs[[k, i]]).re;
+            }
+        }
+        result
+    }
+
+    pub fn normalize(&self, vec: &nd::Array1<Complex<T>>) -> nd::Array1<Complex<T>>
+    where
+        T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
+    {
+        let divisor = vec.dot(&vec.mapv(|x| x.conj())).re.sqrt();
+        nd::Zip::from(vec).map_collect(|x| x / divisor)
+    }
+
+    pub fn project(&self, a: &nd::Array1<Complex<T>>) -> nd::Array2<Complex<T>>
+    where
+        T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
+    {
+        let length = a.len();
+        let b = a.mapv(|x| x.conj()).into_shape((length, 1)).unwrap();
+        // .zip(mtx1_conj.outer_iter()).map_collect(|(x, y)| x * y)
+        let a1 = a.clone().into_shape((1, length)).unwrap();
+
+        b.dot(&a1).reversed_axes()
+    }
+
+    pub fn kronecker(
+        &self,
+        a: &nd::Array2<Complex<T>>,
+        b: &nd::Array2<Complex<T>>,
+    ) -> nd::Array2<Complex<T>>
+    where
+        T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
+    {
+        let ddd1 = a.dim().0;
+        let ddd2 = b.dim().0;
+
+        let output_shape = (ddd1 * ddd2, ddd1 * ddd2);
+
+        let mut out_mtx = nd::Array::zeros((ddd1, ddd2, ddd1, ddd2));
+
+        for ((i1, j1), x) in a.indexed_iter() {
+            for ((i2, j2), y) in b.indexed_iter() {
+                out_mtx[[i1, i2, j1, j2]] = x * y;
+            }
+        }
+
+        out_mtx.into_shape(output_shape).unwrap()
+    }
+
+    pub fn rotate(
+        &self,
+        rho2: &nd::Array2<Complex<T>>,
+        unitary: &nd::Array2<Complex<T>>,
+    ) -> nd::Array2<Complex<T>>
+    where
+        T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
+    {
+        let unitary_conj_transpose = unitary.mapv(|x| x.conj()).reversed_axes();
+        let rho2a = rho2.dot(&unitary_conj_transpose);
+        unitary.dot(&rho2a)
+    }
+
+    pub fn get_random_haar_1d(&self, depth: usize) -> nd::Array1<Complex<T>>
+    where
+        T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
+    {
+        let normal =
+            rand_distr::Uniform::<T>::new(T::from(0.0).unwrap(), T::from(1.0).unwrap());
+
+        let mut rng_real = rand::thread_rng();
+
+        let real = (&mut rng_real)
+            .sample_iter(&normal)
+            .take(depth)
+            .collect::<Vec<T>>();
+
+        let imaginary = (&mut rng_real)
+            .sample_iter(&normal)
+            .take(depth)
+            .collect::<Vec<T>>();
+
+        nd::Zip::from(&real).and(&imaginary).map_collect(|r, i| {
+            let in_exp = T::from(2.0f64).unwrap() * T::from(PI).unwrap() * *r;
+            let c_r = Complex::<T>::new(T::zero(), in_exp);
+            let c_i = (-T::ln(*i)).sqrt();
+
+            Complex::<T>::exp(c_r) * c_i
+        })
+    }
+
+    fn apply_symmetries(
+        &self,
+        state: &nd::Array2<Complex<T>>,
+        symmetries: &Vec<Vec<nd::Array2<Complex<T>>>>,
+    ) -> nd::Array2<Complex<T>>
+    where
+        T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
+    {
+        let mut output = state.to_owned();
+
+        for row in symmetries {
+            for symmetry in row {
+                output = self.rotate(&output, symmetry) + output;
+            }
+        }
+
+        let mut trace = Complex::<T>::zero();
+        for i in 0..output.dim().0 {
+            trace = trace + output[[i, i]];
+        }
+
+        output = output.map(|x| *x / trace);
+        output
+    }
+
+    //   ██████     ███████    ███████            ███    ███     ██████     ██████     ███████
+    //   ██   ██    ██         ██                 ████  ████    ██    ██    ██   ██    ██
+    //   ██   ██    █████      ███████            ██ ████ ██    ██    ██    ██   ██    █████
+    //   ██   ██    ██              ██            ██  ██  ██    ██    ██    ██   ██    ██
+    //   ██████     ██         ███████            ██      ██     ██████     ██████     ███████
+
+    pub fn expand_d_fs(
+        &self,
+        value: &nd::Array2<Complex<T>>,
+        depth: usize,
+        quantity: usize,
+        idx: usize,
+    ) -> nd::Array2<Complex<T>>
+    where
+        T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
+    {
+        let depth_1 = depth.pow(idx as u32);
+        let identity_1 = nd::Array::eye(depth_1);
+
+        let depth_2 = depth.pow((quantity - idx - 1) as u32);
+        let identity_2 = nd::Array::eye(depth_2);
+
+        let kronecker_1 = self.kronecker(&identity_1, value);
+        self.kronecker(&kronecker_1, &identity_2)
+    }
+
+    pub fn random_unitary_d_fs(
+        &self,
+        depth: usize,
+        quantity: usize,
+        idx: usize,
+    ) -> nd::Array2<Complex<T>>
+    where
+        T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
+    {
+        let value = self._random_unitary_d_fs(depth);
+        self.expand_d_fs(&value, depth, quantity, idx)
+    }
+
+    pub fn _random_unitary_d_fs(&self, depth: usize) -> nd::Array2<Complex<T>>
+    where
+        T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
+    {
+        let random_mtx = self
+            .get_random_haar_1d(depth)
+            .into_shape((depth, 1))
+            .unwrap();
+        let identity_mtx = nd::Array2::<Complex<T>>::eye(depth);
+
+        let value = self._value();
+        let rand_mul = random_mtx.mapv(|x| value * x);
+
+        rand_mul + identity_mtx
+    }
+
+    pub fn _value(&self) -> Complex<T>
+    where
+        T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
+    {
+        let real = T::from(0.01 * PI).unwrap();
+        let imaginary = T::from(0.01 * PI).unwrap();
+
+        Complex::new(real.cos() - T::one(), imaginary.sin())
+    }
+
+    pub fn random_d_fs(&self, depth: usize, quantity: usize) -> nd::Array2<Complex<T>>
+    where
+        T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
+    {
+        let vector = self.normalize(&self.get_random_haar_1d(depth));
+        let mut vector_2d;
+
+        vector_2d = vector.into_shape((depth, 1)).unwrap();
+
+        let mut vector_width = depth;
+
+        for _ in 1..quantity {
+            let rand_vector = self.get_random_haar_1d(depth);
+            let normalized_rand_vector = self.normalize(&rand_vector);
+
+            let normalized_rand_vector_2d =
+                normalized_rand_vector.into_shape((1, depth)).unwrap();
+
+            let matrix = vector_2d.dot(&normalized_rand_vector_2d);
+            vector_width *= depth;
+
+            vector_2d = matrix.into_shape((vector_width, 1)).unwrap();
+        }
+        self.project(&vector_2d.into_shape((vector_width,)).unwrap())
+    }
+
+    pub fn optimize_d_fs(
+        &self,
+        new_state: &nd::Array2<Complex<T>>,
+        visibility_state: &nd::Array2<Complex<T>>,
+        depth: usize,
+        quantity: usize,
+        updates_count: usize,
+    ) -> nd::Array2<Complex<T>>
+    where
+        T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
+    {
+        let mut product_2_3 = RustBackend::product(new_state, visibility_state);
+        let mut unitary = self.random_unitary_d_fs(depth, quantity, 0);
+        let mut rotated_2 = self.rotate(new_state, &unitary);
+
+        for idx in 0..updates_count {
+            let idx_mod = idx % quantity;
+            unitary = self.random_unitary_d_fs(depth, quantity, idx_mod);
+
+            rotated_2 = self.rotate(new_state, &unitary);
+
+            let mut product_rot2_3 = RustBackend::product(&rotated_2, visibility_state);
+
+            if product_2_3 > product_rot2_3 {
+                unitary = unitary.mapv(|x| x.conj()).t().to_owned();
+                rotated_2 = self.rotate(new_state, &unitary);
+            }
+
+            while product_2_3 > product_rot2_3 {
+                product_2_3 = product_rot2_3;
+                rotated_2 = self.rotate(&rotated_2, &unitary);
+
+                product_rot2_3 = RustBackend::product(&rotated_2, visibility_state);
+            }
+        }
+
+        rotated_2
     }
 }
