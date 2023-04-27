@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "cssfinder-backend-rust-dev"
-version = "0.1.0"
+version = "0.1.1"
 description = "Development environment for Rust based implementation of CSSFinder backend. Use Maturin to build."
 authors = ["Krzysztof Wisniewski <argmaster.world@gmail.com>"]
 repository = "https://github.com/argmaster/cssfinder_backend_rust"
