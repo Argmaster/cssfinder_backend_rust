@@ -41,7 +41,7 @@ version = { script = "scripts.version:main" }
 
 [project]
 name = "cssfinder_backend_rust"
-version = "0.1.0"
+version = "0.1.1"
 requires-python = ">=3.8"
 authors = [
     { name = "Krzysztof Wisniewski", email = "argmaster.world@gmail.com" },

@@ -72,6 +72,11 @@ def create(version: str) -> None:
         f'version = "{version}"\n',
     )
     replace_version(
+        PYPROJECT_PATH,
+        r"version\s*=\s*\"(.*?)\"\n",
+        f'version = "{version}"\n',
+    )
+    replace_version(
         ROOT_DIR / "Cargo.toml",
         r"version\s*=\s*\"(.*?)\"\n",
         f'version = "{version}"\n',
