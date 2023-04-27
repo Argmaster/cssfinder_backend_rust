@@ -1,6 +1,6 @@
 [package]
 name = "cssfinder-backend-rust"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Krzysztof Wisniewski <argmaster.world@gmail.com>"]
 description = "Implementation of CSSFinder backend using Rust."
