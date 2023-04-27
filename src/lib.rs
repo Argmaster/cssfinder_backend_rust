@@ -379,7 +379,7 @@ mod complex64 {
 
         fn set_symmetries(
             &mut self,
-            symmetries: Vec<Vec<np::PyReadonlyArray2<Complex<f32>>>>,
+            symmetries: Vec<Vec<np::PyReadonlyArray2<Complex<f64>>>>,
         ) {
             use ndarray as nd;
 
@@ -390,7 +390,9 @@ mod complex64 {
                         .into_iter()
                         .map(|pyarray| {
                             let array_ref = pyarray.as_array();
-                            let array: nd::Array2<Complex<f32>> = array_ref.to_owned();
+                            let array: nd::Array2<Complex<f32>> = array_ref.mapv(|x| {
+                                Complex::<f32>::new(x.re as f32, x.im as f32)
+                            });
                             array
                         })
                         .collect()
