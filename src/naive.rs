@@ -23,6 +23,7 @@ use std::f64::consts::PI;
 use std::fmt;
 use std::ops::Sub;
 
+use nd::s;
 use ndarray as nd;
 use num::Complex;
 use num_traits::{Float, Zero};
@@ -60,6 +61,9 @@ pub struct RustBackend<T> {
     // be passed during construction before `optimize_callback` as it uses match on mode
     // the mode otherwise would be moved, thus requiring a clone.
     mode: AlgoMode,
+
+    precalculated_rands: nd::Array1<Complex<T>>,
+    rand_index: usize,
 }
 
 impl<T> fmt::Debug for RustBackend<T>
@@ -105,6 +109,8 @@ where
         let aa6 = RustBackend::product(&intermediate_matrix, &intermediate_matrix);
         let dd1 = RustBackend::product(&intermediate_matrix, &visibility_reduced);
 
+        let precalculated_rands = RustBackend::<T>::precalculate_rands(32768usize);
+
         RustBackend {
             initial: initial.to_owned(),
 
@@ -125,7 +131,35 @@ where
             dd1,
 
             mode,
+
+            precalculated_rands,
+            rand_index: 0,
         }
+    }
+
+    fn precalculate_rands(total: usize) -> nd::Array1<Complex<T>> {
+        let normal =
+            rand_distr::Uniform::<T>::new(T::from(0.0).unwrap(), T::from(1.0).unwrap());
+
+        let mut rng_real = rand::thread_rng();
+
+        let real = (&mut rng_real)
+            .sample_iter(&normal)
+            .take(total)
+            .collect::<Vec<T>>();
+
+        let imaginary = (&mut rng_real)
+            .sample_iter(&normal)
+            .take(total)
+            .collect::<Vec<T>>();
+
+        nd::Zip::from(&real).and(&imaginary).map_collect(|r, i| {
+            let in_exp = T::from(2.0f64).unwrap() * T::from(PI).unwrap() * *r;
+            let c_r = Complex::<T>::new(T::zero(), in_exp);
+            let c_i = (-T::ln(*i)).sqrt();
+
+            Complex::<T>::exp(c_r) * c_i
+        })
     }
 
     fn create_visibility_matrix(
@@ -219,13 +253,9 @@ where
         let literal_two = T::from(2).unwrap();
 
         let optimized_state = match self.mode {
-            AlgoMode::FSnQd => self.optimize_d_fs(
-                alternative_state,
-                &self.visibility_reduced,
-                depth,
-                quantity,
-                epochs,
-            ),
+            AlgoMode::FSnQd => {
+                self.optimize_d_fs(alternative_state, depth, quantity, epochs)
+            }
             AlgoMode::SBiPa => panic!("Mode 'SBiPa' is currently not supported."),
             AlgoMode::G3PaE3qD => {
                 panic!("Mode 'G3PaE3qD' is currently not supported.")
@@ -347,32 +377,17 @@ where
         unitary.dot(&rho2a)
     }
 
-    pub fn get_random_haar_1d(&self, depth: usize) -> nd::Array1<Complex<T>>
+    pub fn get_random_haar_1d(&mut self, depth: usize) -> nd::Array1<Complex<T>>
     where
         T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
     {
-        let normal =
-            rand_distr::Uniform::<T>::new(T::from(0.0).unwrap(), T::from(1.0).unwrap());
-
-        let mut rng_real = rand::thread_rng();
-
-        let real = (&mut rng_real)
-            .sample_iter(&normal)
-            .take(depth)
-            .collect::<Vec<T>>();
-
-        let imaginary = (&mut rng_real)
-            .sample_iter(&normal)
-            .take(depth)
-            .collect::<Vec<T>>();
-
-        nd::Zip::from(&real).and(&imaginary).map_collect(|r, i| {
-            let in_exp = T::from(2.0f64).unwrap() * T::from(PI).unwrap() * *r;
-            let c_r = Complex::<T>::new(T::zero(), in_exp);
-            let c_i = (-T::ln(*i)).sqrt();
-
-            Complex::<T>::exp(c_r) * c_i
-        })
+        let return_value = self
+            .precalculated_rands
+            .slice(s![self.rand_index..self.rand_index + depth])
+            .to_owned();
+        self.rand_index =
+            (self.rand_index + depth) % (self.precalculated_rands.dim() - depth);
+        return_value
     }
 
     fn apply_symmetries(
@@ -427,7 +442,7 @@ where
     }
 
     pub fn random_unitary_d_fs(
-        &self,
+        &mut self,
         depth: usize,
         quantity: usize,
         idx: usize,
@@ -439,7 +454,7 @@ where
         self.expand_d_fs(&value, depth, quantity, idx)
     }
 
-    pub fn _random_unitary_d_fs(&self, depth: usize) -> nd::Array2<Complex<T>>
+    pub fn _random_unitary_d_fs(&mut self, depth: usize) -> nd::Array2<Complex<T>>
     where
         T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
     {
@@ -465,11 +480,16 @@ where
         Complex::new(real.cos() - T::one(), imaginary.sin())
     }
 
-    pub fn random_d_fs(&self, depth: usize, quantity: usize) -> nd::Array2<Complex<T>>
+    pub fn random_d_fs(
+        &mut self,
+        depth: usize,
+        quantity: usize,
+    ) -> nd::Array2<Complex<T>>
     where
         T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
     {
-        let vector = self.normalize(&self.get_random_haar_1d(depth));
+        let rand_vector = self.get_random_haar_1d(depth);
+        let vector = self.normalize(&rand_vector);
         let mut vector_2d;
 
         vector_2d = vector.into_shape((depth, 1)).unwrap();
@@ -492,9 +512,8 @@ where
     }
 
     pub fn optimize_d_fs(
-        &self,
+        &mut self,
         new_state: &nd::Array2<Complex<T>>,
-        visibility_state: &nd::Array2<Complex<T>>,
         depth: usize,
         quantity: usize,
         updates_count: usize,
@@ -502,7 +521,9 @@ where
     where
         T: Float + std::fmt::Debug + rand_distr::uniform::SampleUniform + 'static,
     {
-        let mut product_2_3 = RustBackend::product(new_state, visibility_state);
+        let visibility_state = self.visibility_reduced.clone();
+
+        let mut product_2_3 = RustBackend::product(new_state, &visibility_state);
         let mut unitary = self.random_unitary_d_fs(depth, quantity, 0);
         let mut rotated_2 = self.rotate(new_state, &unitary);
 
@@ -512,7 +533,8 @@ where
 
             rotated_2 = self.rotate(new_state, &unitary);
 
-            let mut product_rot2_3 = RustBackend::product(&rotated_2, visibility_state);
+            let mut product_rot2_3 =
+                RustBackend::product(&rotated_2, &visibility_state);
 
             if product_2_3 > product_rot2_3 {
                 unitary = unitary.mapv(|x| x.conj()).t().to_owned();
@@ -523,7 +545,7 @@ where
                 product_2_3 = product_rot2_3;
                 rotated_2 = self.rotate(&rotated_2, &unitary);
 
-                product_rot2_3 = RustBackend::product(&rotated_2, visibility_state);
+                product_rot2_3 = RustBackend::product(&rotated_2, &visibility_state);
             }
         }
 
