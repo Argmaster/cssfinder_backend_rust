@@ -20,8 +20,8 @@
 
 use pyo3::{prelude::*, types::PyDict};
 
-mod naive;
-mod shared;
+pub mod naive;
+pub mod shared;
 
 /// A Python module implemented in Rust.
 #[pymodule]
@@ -97,7 +97,7 @@ fn register_complex64(py: Python, parent: &PyModule) -> PyResult<()> {
     Ok(())
 }
 
-mod complex128 {
+pub mod complex128 {
     use num::Complex;
     use numpy as np;
     use pyo3::prelude::*;
@@ -180,7 +180,7 @@ mod complex128 {
     }
 }
 
-mod complex64 {
+pub mod complex64 {
     use num::Complex;
     use numpy as np;
     use pyo3::prelude::*;
