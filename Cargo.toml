@@ -14,7 +14,9 @@ name = "cssfinder_backend_rust"
 crate-type = ["cdylib"]
 
 [dependencies]
-ndarray = "0.15.6"
+ndarray = { version = "0.15.6", features = ["blas"] }
+openblas-src = { version = "0.10.8", features = ["system"] }
+openssl-sys = { version = "0.9.87", features = ["vendored"] }
 ndarray-rand = "0.14"
 num = "0.4.0"
 num-traits = "0.2.15"

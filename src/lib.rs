@@ -19,6 +19,7 @@
 // OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use pyo3::{prelude::*, types::PyDict};
+extern crate openblas_src;
 
 mod naive;
 mod shared;
